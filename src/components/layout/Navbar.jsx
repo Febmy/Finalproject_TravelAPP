@@ -1,4 +1,4 @@
-// src/components/Navbar.jsx
+// src/components/layout/Navbar.jsx
 import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import api from "../../lib/api.js";
@@ -7,9 +7,11 @@ import { useToast } from "../../context/ToastContext.jsx";
 export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
+
   const [cartCount, setCartCount] = useState(0);
   const [userName, setUserName] = useState("");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [userRole, setUserRole] = useState("");
 
   const token = localStorage.getItem("token");
   const isLoggedIn = !!token;
@@ -17,7 +19,7 @@ export default function Navbar() {
 
   const handleLogout = () => {
     localStorage.removeItem("token");
-    localStorage.removeItem("userProfile");
+    localStorage.removeItem("userProfile"); // 🔹 bersihkan profile juga
     showToast({ type: "success", message: "Berhasil logout." });
     navigate("/login");
   };
@@ -47,13 +49,22 @@ export default function Navbar() {
     const loadUser = async () => {
       if (!token) {
         setUserName("");
+        setUserRole("");
+        localStorage.removeItem("userProfile");
         return;
       }
       try {
         const res = await api.get("/user");
-        setUserName(res.data.data?.name || "");
+        const data = res.data.data || {};
+        setUserName(data.name || "");
+        setUserRole(data.role || "");
+
+        // 🔹 SIMPAN PROFILE UNTUK RequireAdmin
+        localStorage.setItem("userProfile", JSON.stringify(data));
       } catch (err) {
         console.error("Navbar user error:", err.response?.data || err.message);
+        setUserRole("");
+        localStorage.removeItem("userProfile");
       }
     };
 
@@ -156,7 +167,16 @@ export default function Navbar() {
                 Menu
               </button>
 
-              {/* DESKTOP/TABLET: PROFILE, TRANSACTIONS, LOGOUT */}
+              {/* DESKTOP/TABLET: ADMIN (JIKA ADMIN), PROFILE, TRANSACTIONS, LOGOUT */}
+              {userRole === "admin" && (
+                <Link
+                  to="/admin"
+                  className="hidden sm:inline-flex text-xs md:text-sm px-3 py-1.5 rounded-full border border-slate-300 text-slate-700 hover:bg-slate-100"
+                >
+                  Admin
+                </Link>
+              )}
+
               <Link
                 to="/profile"
                 className="hidden sm:inline-flex text-xs md:text-sm px-3 py-1.5 rounded-full border border-slate-300 text-slate-700 hover:bg-slate-100"
@@ -222,6 +242,16 @@ export default function Navbar() {
 
             {isLoggedIn && (
               <>
+                {userRole === "admin" && (
+                  <NavLink
+                    to="/admin"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="px-3 py-1.5 rounded-lg text-slate-700 hover:bg-slate-100"
+                  >
+                    Admin
+                  </NavLink>
+                )}
+
                 <NavLink
                   to="/profile"
                   onClick={() => setIsMenuOpen(false)}
