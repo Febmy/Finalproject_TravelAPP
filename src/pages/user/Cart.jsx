@@ -1,11 +1,11 @@
 // src/pages/Cart.jsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../lib/api";
-import { useToast } from "../context/ToastContext.jsx";
-import EmptyState from "../components/ui/EmptyState.jsx";
-import Spinner from "../components/ui/Spinner.jsx";
-import { formatCurrency } from "../lib/format.js";
+import api from "../../lib/api.js";
+import { useToast } from "../../context/ToastContext.jsx";
+import EmptyState from "../../components/ui/EmptyState.jsx";
+import Spinner from "../../components/ui/Spinner.jsx";
+import { formatCurrency } from "../../lib/format.js";
 
 export default function Cart() {
   const [items, setItems] = useState([]);

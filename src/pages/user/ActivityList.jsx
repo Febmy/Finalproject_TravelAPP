@@ -1,7 +1,7 @@
 // src/pages/user/ActivityList.jsx
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import api from "../lib/api.js"; // eslint-disable-line no-unused-vars />
+import api from "../../lib/api.js"; // eslint-disable-line no-unused-vars />
 
 function formatCurrency(value) {
   if (value == null) return "-";

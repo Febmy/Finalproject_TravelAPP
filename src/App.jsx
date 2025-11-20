@@ -8,17 +8,16 @@ import ScrollToTop from "./components/layout/ScrollToTop.jsx";
 import PageContainer from "./components/layout/PageContainer.jsx";
 
 // USER PAGES
-import Home from "./pages/Home.jsx";
-import ActivityList from "./pages/ActivityList.jsx";
-import ActivityDetail from "./pages/ActivityDetail.jsx";
-import Cart from "./pages/Cart.jsx";
-import Checkout from "./pages/Checkout.jsx";
-import Transactions from "./pages/Transactions.jsx";
-import Profile from "./pages/Profile.jsx";
+import Home from "./pages/user/Home.jsx";
+import ActivityList from "./pages/user/ActivityList.jsx";
+import ActivityDetail from "./pages/user/ActivityDetail.jsx";
+import Cart from "./pages/user/Cart.jsx";
+import Checkout from "./pages/user/Checkout.jsx";
+import Transactions from "./pages/user/Transactions.jsx";
+import Profile from "./pages/user/Profile.jsx";
 import Login from "./pages/auth/Login.jsx";
 import Register from "./pages/auth/Register.jsx";
-import Promos from "./pages/Promos.jsx";
-
+import Promos from "./pages/user/Promos.jsx";
 // ADMIN PAGES
 import AdminDashboard from "./pages/admin/AdminDashboard.jsx";
 import AdminTransactions from "./pages/admin/AdminTransactions.jsx";

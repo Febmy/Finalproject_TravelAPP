@@ -1,124 +1,269 @@
+// src/pages/admin/AdminDashboard.jsx
 import { useEffect, useState } from "react";
-import api from "../../lib/api";
-import AdminLayout from "../../components/AdminLayout.jsx";
+import { Link } from "react-router-dom";
+import api from "../../lib/api.js";
+import { useToast } from "../../context/ToastContext.jsx";
+import PageContainer from "../../components/layout/PageContainer.jsx";
 
-function formatCurrency(amount) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(amount || 0);
+function StatCard({ title, value, note, bgClass, detailTo }) {
+  return (
+    <div
+      className={`rounded-3xl p-5 text-white flex flex-col justify-between shadow-sm ${bgClass}`}
+    >
+      <div className="space-y-1">
+        <p className="text-[11px] uppercase tracking-[0.18em] opacity-80">
+          {title}
+        </p>
+        <p className="text-3xl font-semibold">{value}</p>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between">
+        <p className="text-[11px] opacity-90">{note}</p>
+        {detailTo && (
+          <Link
+            to={detailTo}
+            className="text-[11px] underline underline-offset-4"
+          >
+            Lihat detail
+          </Link>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function AdminDashboard() {
-  const [summary, setSummary] = useState({
-    users: 0,
-    admins: 0,
-    activities: 0,
-    transactions: 0,
-    revenue: 0,
-  });
+  const { showToast } = useToast();
+
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [hasPartialError, setHasPartialError] = useState(false);
+  const [stats, setStats] = useState({
+    activities: 0,
+    promos: 0,
+    transactions: 0,
+    users: 0,
+  });
 
   useEffect(() => {
-    const load = async () => {
+    const loadStats = async () => {
+      setLoading(true);
+      setHasPartialError(false);
+
       try {
-        setLoading(true);
+        const [activitiesRes, promosRes, txRes, userRes] =
+          await Promise.allSettled([
+            api.get("/activities"),
+            api.get("/promos"),
+            api.get("/my-transactions"), // transaksi akun login
+            api.get("/user"), // profile akun login
+          ]);
 
-        const [userRes, txRes, actRes] = await Promise.all([
-          api.get("/all-user"),
-          api.get("/all-transactions"),
-          api.get("/activities?limit=100"),
-        ]);
+        let activitiesCount = 0;
+        let promosCount = 0;
+        let transactionsCount = 0;
+        let usersCount = 0;
+        let anyError = false;
 
-        const users = userRes.data.data || [];
-        const transactions = txRes.data.data || [];
-        const activities = actRes.data.data || [];
-
-        const admins = users.filter((u) => u.role === "admin").length;
-
-        const revenue = transactions
-          .filter((tx) =>
-            ["success", "SUCCESS", "paid", "PAID"].includes(tx.status)
-          )
-          .reduce(
-            (sum, tx) => sum + (tx.totalPrice || tx.total || tx.amount || 0),
-            0
+        // ACTIVITIES (GLOBAL)
+        if (activitiesRes.status === "fulfilled") {
+          const data = activitiesRes.value.data.data || [];
+          activitiesCount = Array.isArray(data) ? data.length : 0;
+        } else {
+          anyError = true;
+          console.error(
+            "Dashboard activities error:",
+            activitiesRes.reason?.response?.data || activitiesRes.reason
           );
+        }
 
-        setSummary({
-          users: users.length,
-          admins,
-          activities: activities.length,
-          transactions: transactions.length,
-          revenue,
+        // PROMOS (GLOBAL)
+        if (promosRes.status === "fulfilled") {
+          const data = promosRes.value.data.data || [];
+          promosCount = Array.isArray(data) ? data.length : 0;
+        } else {
+          anyError = true;
+          console.error(
+            "Dashboard promos error:",
+            promosRes.reason?.response?.data || promosRes.reason
+          );
+        }
+
+        // MY TRANSACTIONS (PER AKUN)
+        if (txRes.status === "fulfilled") {
+          const data = txRes.value.data.data || [];
+          transactionsCount = Array.isArray(data) ? data.length : 0;
+        } else {
+          anyError = true;
+          console.error(
+            "Dashboard my-transactions error:",
+            txRes.reason?.response?.data || txRes.reason
+          );
+        }
+
+        // ACTIVE USER (PER AKUN)
+        if (userRes.status === "fulfilled") {
+          const user = userRes.value.data.data || null;
+          usersCount = user ? 1 : 0;
+        } else {
+          anyError = true;
+          console.error(
+            "Dashboard user profile error:",
+            userRes.reason?.response?.data || userRes.reason
+          );
+        }
+
+        setStats({
+          activities: activitiesCount,
+          promos: promosCount,
+          transactions: transactionsCount,
+          users: usersCount,
         });
+
+        if (anyError) {
+          setHasPartialError(true);
+          showToast({
+            type: "warning",
+            message:
+              "Sebagian data dashboard gagal dimuat. Cek console untuk detail.",
+          });
+        }
       } catch (err) {
-        console.error(
-          "Admin dashboard error:",
-          err.response?.data || err.message
-        );
-        setError("Gagal memuat ringkasan admin.");
+        console.error("Dashboard fatal error:", err.response || err.message);
+        setHasPartialError(true);
+        showToast({
+          type: "error",
+          message: "Gagal memuat data dashboard.",
+        });
       } finally {
         setLoading(false);
       }
     };
 
-    load();
-  }, []);
+    loadStats();
+  }, [showToast]);
+
+  if (loading) {
+    return (
+      <PageContainer>
+        <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-4">
+          <div className="h-4 w-32 bg-slate-200 rounded-full animate-pulse" />
+          <div className="h-6 w-40 bg-slate-200 rounded-full animate-pulse" />
+        </div>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((k) => (
+            <div
+              key={k}
+              className="rounded-3xl bg-slate-200/80 h-32 animate-pulse"
+            />
+          ))}
+        </div>
+      </PageContainer>
+    );
+  }
 
   return (
-    <AdminLayout title="Dashboard">
-      {loading && (
-        <p className="text-sm text-slate-500">Memuat ringkasan dashboard...</p>
-      )}
-
-      {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
-
-      {!loading && !error && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="rounded-2xl border border-slate-200 p-4 bg-slate-50">
-            <p className="text-xs text-slate-500">Total User</p>
-            <p className="mt-1 text-2xl font-bold text-slate-900">
-              {summary.users}
+    <PageContainer>
+      {/* HEADER */}
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm mb-6">
+        <div className="px-6 py-4 flex items-center justify-between">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">
+              Admin Panel
             </p>
-            <p className="mt-1 text-[11px] text-slate-500">
-              {summary.admins} admin terdaftar
-            </p>
+            <h1 className="text-lg md:text-xl font-semibold text-slate-900">
+              Dashboard
+            </h1>
           </div>
-
-          <div className="rounded-2xl border border-slate-200 p-4 bg-slate-50">
-            <p className="text-xs text-slate-500">Aktivitas</p>
-            <p className="mt-1 text-2xl font-bold text-slate-900">
-              {summary.activities}
-            </p>
-            <p className="mt-1 text-[11px] text-slate-500">
-              Diambil dari endpoint /activities
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 p-4 bg-slate-50">
-            <p className="text-xs text-slate-500">Transaksi</p>
-            <p className="mt-1 text-2xl font-bold text-slate-900">
-              {summary.transactions}
-            </p>
-            <p className="mt-1 text-[11px] text-slate-500">
-              Data dari /all-transactions
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 p-4 bg-slate-900 text-slate-50">
-            <p className="text-xs text-slate-300">Est. Revenue</p>
-            <p className="mt-1 text-2xl font-bold">
-              {formatCurrency(summary.revenue)}
-            </p>
-            <p className="mt-1 text-[11px] text-slate-300">
-              Hanya transaksi status success/paid
-            </p>
+          <div className="text-right">
+            <p className="text-xs text-slate-500">Ringkasan data</p>
           </div>
         </div>
+
+        <div className="border-t border-slate-200 px-3 md:px-6 py-2 flex flex-wrap gap-2 text-xs">
+          <span className="px-3 py-1.5 rounded-full bg-slate-900 text-white">
+            Dashboard
+          </span>
+          <Link
+            to="/admin/transactions"
+            className="px-3 py-1.5 rounded-full text-slate-700 hover:bg-slate-100"
+          >
+            Transaksi
+          </Link>
+          <Link
+            to="/admin/users"
+            className="px-3 py-1.5 rounded-full text-slate-700 hover:bg-slate-100"
+          >
+            Users
+          </Link>
+          <Link
+            to="/admin/activities"
+            className="px-3 py-1.5 rounded-full text-slate-700 hover:bg-slate-100"
+          >
+            Activities
+          </Link>
+          <Link
+            to="/admin/promos"
+            className="px-3 py-1.5 rounded-full text-slate-700 hover:bg-slate-100"
+          >
+            Promos &amp; Banner
+          </Link>
+
+          <span className="ml-auto hidden md:inline text-[11px] text-slate-400">
+            ← Kembali ke User App lewat navbar biasa
+          </span>
+        </div>
+      </div>
+
+      {hasPartialError && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+          Beberapa data ringkasan gagal dimuat dari API. Silakan cek console
+          browser untuk detail error.
+        </div>
       )}
-    </AdminLayout>
+
+      {/* STAT CARDS */}
+      <section className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-5">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            title="Total Activities"
+            value={stats.activities}
+            note="Global: jumlah data dari endpoint /activities"
+            bgClass="bg-indigo-600"
+            detailTo="/admin/activities"
+          />
+          <StatCard
+            title="Total Promos"
+            value={stats.promos}
+            note="Global: jumlah data dari endpoint /promos"
+            bgClass="bg-emerald-600"
+            detailTo="/admin/promos"
+          />
+          <StatCard
+            title="My Transactions"
+            value={stats.transactions}
+            note="Per akun: jumlah transaksi dari /my-transactions"
+            bgClass="bg-amber-500"
+            detailTo="/admin/transactions"
+          />
+          <StatCard
+            title="Active User"
+            value={stats.users}
+            note="Per akun: 1 jika profile /user berhasil dimuat"
+            bgClass="bg-slate-900"
+            detailTo="/admin/users"
+          />
+        </div>
+
+        <p className="text-[11px] text-slate-500 leading-relaxed">
+          Activities &amp; Promos menggunakan data global dari API. Sementara
+          &quot;My Transactions&quot; dan &quot;Active User&quot; saat ini masih
+          berbasis akun yang sedang login karena tidak tersedia endpoint list
+          global untuk transaksi dan users. Jika di masa depan disediakan
+          endpoint admin khusus, kamu cukup mengganti pemanggilan API di file
+          ini tanpa mengubah tampilan dashboard.
+        </p>
+      </section>
+    </PageContainer>
   );
 }

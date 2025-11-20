@@ -1,8 +1,8 @@
 // src/pages/user/ActivityDetail.jsx
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import api from "../lib/api.js";
-import { useToast } from "../context/ToastContext.jsx";
+import api from "../../lib/api.js";
+import { useToast } from "../../context/ToastContext.jsx";
 
 function formatCurrency(value) {
   if (value == null) return "-";

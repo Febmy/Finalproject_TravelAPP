@@ -1,7 +1,7 @@
 // src/pages/user/Profile.jsx
 import { useEffect, useState } from "react";
-import api from "../lib/api.js";
-import { useToast } from "../context/ToastContext.jsx";
+import api from "../../lib/api.js";
+import { useToast } from "../../context/ToastContext.jsx";
 
 export default function Profile() {
   const [user, setUser] = useState(null);

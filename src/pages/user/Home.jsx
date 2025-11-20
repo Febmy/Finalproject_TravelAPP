@@ -1,7 +1,7 @@
 // src/pages/user/Homepage.jsx
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import api from "../../src/lib/api.js";
+import api from "../../lib/api.js";
 
 export default function Homepage() {
   const [promos, setPromos] = useState([]);

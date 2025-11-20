@@ -24,12 +24,26 @@ function formatCurrency(amount) {
   }).format(amount || 0);
 }
 
+// helper ambil total dari berbagai kemungkinan field
+function getTotal(tx) {
+  return (
+    tx.totalAmount ?? // ini yang dipakai API Travel Journal
+    tx.total_price ??
+    tx.totalPrice ??
+    tx.total ??
+    tx.amount ??
+    0
+  );
+}
+
 export default function AdminTransactions() {
   const [transactions, setTransactions] = useState([]);
   const [statusFilter, setStatusFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [updatingId, setUpdatingId] = useState(null);
 
+  // ambil SEMUA transaksi
   useEffect(() => {
     const load = async () => {
       try {
@@ -49,23 +63,53 @@ export default function AdminTransactions() {
     load();
   }, []);
 
+  // filter berdasar status
   const filtered = transactions.filter((tx) => {
     if (statusFilter === "all") return true;
     return (tx.status || "").toLowerCase() === statusFilter;
   });
 
-  const totalRevenue = filtered
-    .filter((tx) =>
-      ["success", "paid"].includes((tx.status || "").toLowerCase())
-    )
-    .reduce(
-      (sum, tx) => sum + (tx.totalPrice || tx.total || tx.amount || 0),
-      0
-    );
+  // hitung total revenue HANYA untuk status sukses / paid
+  const totalRevenue = filtered.reduce((sum, tx) => {
+    const status = (tx.status || "").toLowerCase();
+    if (status === "success" || status === "paid") {
+      return sum + getTotal(tx);
+    }
+    return sum;
+  }, 0);
+
+  const handleUpdateStatus = async (id, newStatus) => {
+    const nice = newStatus === "success" ? "Success" : "Failed";
+    const ok = window.confirm(`Ubah status transaksi ini menjadi "${nice}"?`);
+    if (!ok) return;
+
+    try {
+      setUpdatingId(id);
+      // API hanya menerima "success" atau "failed" (lowercase)
+      await api.post(`/update-transaction-status/${id}`, {
+        status: newStatus,
+      });
+
+      // update lokal supaya tidak perlu reload page
+      setTransactions((prev) =>
+        prev.map((tx) =>
+          tx.id === id ? { ...tx, status: newStatus.toUpperCase() } : tx
+        )
+      );
+    } catch (err) {
+      console.error(
+        "update-transaction-status error:",
+        err.response?.data || err.message
+      );
+      alert("Gagal update status transaksi.");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   return (
     <AdminLayout title="Semua Transaksi">
-      {/* FILTER BAR */}
+      {/* FILTER BAR + INFO */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
         <div>
           <p className="text-sm font-semibold text-slate-900">
@@ -77,18 +121,24 @@ export default function AdminTransactions() {
         </div>
 
         <div className="flex flex-wrap gap-2 text-xs md:text-sm">
-          {["all", "pending", "success", "cancel"].map((st) => (
+          {[
+            { key: "all", label: "Semua" },
+            { key: "pending", label: "Pending" },
+            { key: "success", label: "Success" },
+            { key: "failed", label: "Failed" },
+            { key: "cancelled", label: "Cancelled" },
+          ].map((f) => (
             <button
-              key={st}
+              key={f.key}
               type="button"
-              onClick={() => setStatusFilter(st)}
+              onClick={() => setStatusFilter(f.key)}
               className={`px-3 py-1.5 rounded-full border text-xs md:text-sm ${
-                statusFilter === st
+                statusFilter === f.key
                   ? "bg-slate-900 text-white border-slate-900"
                   : "border-slate-200 text-slate-600 hover:bg-slate-100"
               }`}
             >
-              {st === "all" ? "Semua" : st[0].toUpperCase() + st.slice(1)}
+              {f.label}
             </button>
           ))}
         </div>
@@ -110,11 +160,16 @@ export default function AdminTransactions() {
                 <th className="text-left py-2 px-2 md:px-3">Status</th>
                 <th className="text-left py-2 px-2 md:px-3">Metode</th>
                 <th className="text-left py-2 px-2 md:px-3">Tanggal</th>
+                <th className="text-left py-2 px-2 md:px-3">Aksi</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((tx) => {
                 const pm = tx.paymentMethod || tx.payment_method || null;
+                const total = getTotal(tx);
+                const statusLower = (tx.status || "").toLowerCase();
+
+                const isPending = statusLower === "pending";
 
                 return (
                   <tr
@@ -124,6 +179,7 @@ export default function AdminTransactions() {
                     <td className="py-2 px-2 md:px-3 font-mono text-[11px]">
                       {tx.id}
                     </td>
+
                     <td className="py-2 px-2 md:px-3">
                       <p className="font-medium text-slate-900 text-xs md:text-sm">
                         {tx.user?.name || "-"}
@@ -132,27 +188,28 @@ export default function AdminTransactions() {
                         {tx.user?.email || "-"}
                       </p>
                     </td>
+
                     <td className="py-2 px-2 md:px-3">
-                      {formatCurrency(
-                        tx.totalPrice || tx.total || tx.amount || 0
-                      )}
+                      {formatCurrency(total)}
                     </td>
+
                     <td className="py-2 px-2 md:px-3">
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                          (tx.status || "").toLowerCase() === "success" ||
-                          (tx.status || "").toLowerCase() === "paid"
+                          statusLower === "success" || statusLower === "paid"
                             ? "bg-emerald-100 text-emerald-700"
-                            : (tx.status || "").toLowerCase() === "pending"
+                            : statusLower === "pending"
                             ? "bg-amber-100 text-amber-700"
+                            : statusLower === "failed"
+                            ? "bg-red-100 text-red-700"
                             : "bg-slate-100 text-slate-600"
                         }`}
                       >
                         {tx.status || "-"}
                       </span>
                     </td>
+
                     <td className="py-2 px-2 md:px-3">
-                      {/* 🔹 TAMPILKAN NAMA PAYMENT METHOD, BUKAN OBJECT */}
                       <p className="text-xs text-slate-900">
                         {pm?.name ||
                           pm?.virtual_account_name ||
@@ -164,8 +221,36 @@ export default function AdminTransactions() {
                         </p>
                       )}
                     </td>
+
                     <td className="py-2 px-2 md:px-3 text-xs text-slate-600">
                       {formatDateTime(tx.createdAt || tx.updatedAt)}
+                    </td>
+
+                    <td className="py-2 px-2 md:px-3">
+                      {isPending ? (
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={updatingId === tx.id}
+                            onClick={() => handleUpdateStatus(tx.id, "success")}
+                            className="px-3 py-1 rounded-full text-[11px] bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-60"
+                          >
+                            Approve (Success)
+                          </button>
+                          <button
+                            type="button"
+                            disabled={updatingId === tx.id}
+                            onClick={() => handleUpdateStatus(tx.id, "failed")}
+                            className="px-3 py-1 rounded-full text-[11px] bg-red-500 text-white hover:bg-red-600 disabled:opacity-60"
+                          >
+                            Reject (Failed)
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-slate-400">
+                          Hanya transaksi pending yang bisa diubah.
+                        </p>
+                      )}
                     </td>
                   </tr>
                 );
@@ -174,7 +259,7 @@ export default function AdminTransactions() {
               {filtered.length === 0 && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="py-4 px-3 text-center text-sm text-slate-500"
                   >
                     Tidak ada transaksi untuk filter ini.
