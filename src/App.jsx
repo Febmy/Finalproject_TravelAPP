@@ -18,12 +18,14 @@ import Profile from "./pages/user/Profile.jsx";
 import Login from "./pages/auth/Login.jsx";
 import Register from "./pages/auth/Register.jsx";
 import Promos from "./pages/user/Promos.jsx";
+import NotFound from "./pages/user/NotFound.jsx"; // 🔹 pakai NotFound
+
 // ADMIN PAGES
 import AdminDashboard from "./pages/admin/AdminDashboard.jsx";
 import AdminTransactions from "./pages/admin/AdminTransactions.jsx";
 import AdminUsers from "./pages/admin/AdminUsers.jsx";
-import AdminActivities from "./pages/admin/AdminActivities.jsx"; // 🔹 baru
-import AdminPromos from "./pages/admin/AdminPromos.jsx"; // 🔹 baru
+import AdminActivities from "./pages/admin/AdminActivities.jsx";
+import AdminPromos from "./pages/admin/AdminPromos.jsx";
 
 // Proteksi route yang butuh login
 function RequireAuth({ children }) {
@@ -63,7 +65,9 @@ function RequireAdmin({ children }) {
 export default function App() {
   return (
     <>
+      {/* ScrollToTop cukup di sini */}
       <ScrollToTop />
+
       <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
         <Navbar />
 
@@ -136,7 +140,7 @@ export default function App() {
                 </RequireAdmin>
               }
             />
-            <Route // 🔹 baru
+            <Route
               path="/admin/activities"
               element={
                 <RequireAdmin>
@@ -144,7 +148,7 @@ export default function App() {
                 </RequireAdmin>
               }
             />
-            <Route // 🔹 baru
+            <Route
               path="/admin/promos"
               element={
                 <RequireAdmin>
@@ -153,8 +157,8 @@ export default function App() {
               }
             />
 
-            {/* FALLBACK */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* FALLBACK 404 */}
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </PageContainer>
 

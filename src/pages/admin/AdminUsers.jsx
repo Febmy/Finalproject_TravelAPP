@@ -1,7 +1,7 @@
 // src/pages/admin/AdminUsers.jsx
 import { useEffect, useState } from "react";
 import api from "../../lib/api.js";
-import AdminLayout from "../../components/AdminLayout.jsx";
+import AdminLayout from "../../components/layout/AdminLayout.jsx";
 import { useToast } from "../../context/ToastContext.jsx";
 
 export default function AdminUsers() {
@@ -70,60 +70,61 @@ export default function AdminUsers() {
 
   return (
     <AdminLayout title="User Management">
-      {/* STATE: loading */}
-      {loading && !error && (
-        <p className="text-sm text-slate-500">Memuat daftar user...</p>
-      )}
+      {/* Container tengah, lebar dibatasi */}
+      <div className="max-w-4xl mx-auto w-full">
+        {/* STATE: loading */}
+        {loading && !error && (
+          <p className="text-sm text-slate-500">Memuat daftar user...</p>
+        )}
 
-      {/* STATE: error */}
-      {error && (
-        <div className="mb-3 rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
-          {error}
-        </div>
-      )}
+        {/* STATE: error */}
+        {error && (
+          <div className="mb-3 rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+            {error}
+          </div>
+        )}
 
-      {/* STATE: sukses */}
-      {!loading && !error && (
-        <div className="space-y-3">
-          {users.map((user) => (
-            <div
-              key={user.id}
-              className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 border border-slate-200 rounded-xl px-3 py-2 bg-slate-50"
-            >
-              <div>
-                <p className="text-sm font-semibold text-slate-900">
-                  {user.name || "-"}
-                </p>
-                <p className="text-xs text-slate-500">{user.email || "-"}</p>
+        {/* STATE: sukses */}
+        {!loading && !error && (
+          <div className="space-y-3">
+            {users.map((user) => (
+              <div
+                key={user.id}
+                className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 border border-slate-200 rounded-xl px-3 py-2 bg-slate-50"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {user.name || "-"}
+                  </p>
+                  <p className="text-xs text-slate-500">{user.email || "-"}</p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-slate-900 text-white uppercase tracking-[0.16em]">
+                    {user.role || "user"}
+                  </span>
+
+                  <select
+                    value={user.role || "user"}
+                    onChange={(e) => handleChangeRole(user.id, e.target.value)}
+                    disabled={savingId === user.id}
+                    className="text-xs md:text-sm border border-slate-300 rounded-full px-3 py-1 bg-white"
+                  >
+                    <option value="user">user</option>
+                    <option value="admin">admin</option>
+                  </select>
+                </div>
               </div>
+            ))}
 
-              <div className="flex items-center gap-2">
-                {/* Badge role sekarang */}
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-slate-900 text-white uppercase tracking-[0.16em]">
-                  {user.role || "user"}
-                </span>
-
-                {/* Dropdown ubah role */}
-                <select
-                  value={user.role || "user"} // ✅ controlled, selalu ikut state
-                  onChange={(e) => handleChangeRole(user.id, e.target.value)}
-                  disabled={savingId === user.id}
-                  className="text-xs md:text-sm border border-slate-300 rounded-full px-3 py-1 bg-white"
-                >
-                  <option value="user">user</option>
-                  <option value="admin">admin</option>
-                </select>
-              </div>
-            </div>
-          ))}
-
-          {users.length === 0 && (
-            <p className="text-sm text-slate-500">
-              Belum ada user yang terdaftar.
-            </p>
-          )}
-        </div>
-      )}
+            {users.length === 0 && (
+              <p className="text-sm text-slate-500">
+                Belum ada user yang terdaftar.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
     </AdminLayout>
   );
 }

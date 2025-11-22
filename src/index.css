@@ -1,1 +1,16 @@
 @import "tailwindcss";
+
+/* === MARQUEE BRANDS TRAVEL BEE === */
+@keyframes scroll-marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    /* geser ke kiri, cukup 50% karena kita duplikat list brand */
+    transform: translateX(-50%);
+  }
+}
+
+.brands-marquee {
+  animation: scroll-marquee 25s linear infinite;
+}

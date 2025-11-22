@@ -1,10 +1,11 @@
 // src/pages/admin/AdminPromos.jsx
 import { useEffect, useState } from "react";
 import api from "../../lib/api.js";
-import AdminLayout from "../../components/AdminLayout.jsx";
+import AdminLayout from "../../components/layout/AdminLayout.jsx";
 import Spinner from "../../components/ui/Spinner.jsx";
 import EmptyState from "../../components/ui/EmptyState.jsx";
 import { useToast } from "../../context/ToastContext.jsx";
+import { formatCurrency } from "../../lib/format.js";
 
 // Helper: ambil pesan error paling berguna dari response API
 const extractErrorMessage = (err) => {
@@ -12,14 +13,6 @@ const extractErrorMessage = (err) => {
   const data = res?.data;
 
   // 🔍 Paksa tampilkan detail JSON di console:
-  try {
-    console.log(
-      "create-promo error detail JSON:",
-      JSON.stringify(data, null, 2)
-    );
-  } catch {
-    console.log("create-promo error detail (raw):", data);
-  }
 
   if (!data)
     return err.message || "Terjadi kesalahan tanpa response dari server.";
@@ -43,13 +36,6 @@ const extractErrorMessage = (err) => {
 
   // fallback terakhir: stringified
   return "Gagal menyimpan promo: " + JSON.stringify(data);
-};
-
-const formatCurrency = (value) => {
-  if (!value && value !== 0) return "-";
-  const num = Number(value);
-  if (Number.isNaN(num)) return "-";
-  return `Rp${num.toLocaleString("id-ID")}`;
 };
 
 export default function AdminPromos() {
@@ -222,8 +208,6 @@ export default function AdminPromos() {
         payload.imageUrl = form.imageUrl;
       }
 
-      console.log("Create/Update promo payload:", payload);
-
       if (form.id) {
         // UPDATE
         await api.post(`/update-promo/${form.id}`, payload);
@@ -377,6 +361,11 @@ export default function AdminPromos() {
                     className="mt-2 w-40 h-24 object-cover rounded-lg border border-slate-200"
                   />
                 )}
+                <p className="text-[11px] text-slate-400">
+                  Upload ini hanya untuk preview di panel admin. Gambar yang
+                  ditampilkan ke user diambil dari field{" "}
+                  <span className="font-semibold">Image URL</span>.
+                </p>
               </div>
             </div>
 

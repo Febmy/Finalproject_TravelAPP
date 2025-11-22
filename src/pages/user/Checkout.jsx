@@ -3,17 +3,8 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../lib/api.js";
 import { useToast } from "../../context/ToastContext.jsx";
+import { formatCurrency } from "../../lib/format.js";
 
-function formatCurrency(value) {
-  if (value == null) return "-";
-  const num = Number(value);
-  if (Number.isNaN(num)) return "-";
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(num);
-}
 
 export default function Checkout() {
   const [paymentMethods, setPaymentMethods] = useState([]);

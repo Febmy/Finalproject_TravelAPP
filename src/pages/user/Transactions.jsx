@@ -132,13 +132,12 @@ export default function Transactions() {
             const itemCount = getItemCount(tx);
             const firstCart = tx.carts?.[0];
             const firstActivity = firstCart?.activity;
-
             const title = firstActivity?.title || "Activity";
             const imageUrl =
-              firstActivity?.imageUrls?.[0] ||
-              firstActivity?.imageUrls ||
-              firstActivity?.image ||
-              "https://images.pexels.com/photos/258154/pexels-photo-258154.jpeg";
+              firstActivity?.imageUrl || // <- dari admin (single url)
+              firstActivity?.imageUrls?.[0] || // array url
+              firstActivity?.image || // field lain kalau ada
+              "https://images.pexels.com/photos/258154/pexels-photo-258154.jpeg?auto=compress&cs=tinysrgb&w=1200";
 
             const status = tx.status || "pending";
 

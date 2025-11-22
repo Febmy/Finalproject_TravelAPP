@@ -3,16 +3,17 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "../../lib/api.js";
 import { useToast } from "../../context/ToastContext.jsx";
+import { formatCurrency } from "../../lib/format.js";
+const FALLBACK_ACTIVITY_IMAGE =
+  "https://images.pexels.com/photos/258154/pexels-photo-258154.jpeg?auto=compress&cs=tinysrgb&w=1200";
 
-function formatCurrency(value) {
-  if (value == null) return "-";
-  const num = Number(value);
-  if (Number.isNaN(num)) return "-";
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(num);
+function getImage(act) {
+  return (
+    act?.imageUrl ||
+    (Array.isArray(act?.imageUrls) && act.imageUrls[0]) ||
+    act?.thumbnail ||
+    FALLBACK_ACTIVITY_IMAGE
+  );
 }
 
 export default function ActivityDetail() {
@@ -50,12 +51,6 @@ export default function ActivityDetail() {
 
     load();
   }, [id]);
-
-  const getImage = (act) =>
-    act?.imageUrl ||
-    (Array.isArray(act?.imageUrls) && act.imageUrls[0]) ||
-    act?.thumbnail ||
-    "https://images.pexels.com/photos/258154/pexels-photo-258154.jpeg?auto=compress&cs=tinysrgb&w=1200";
 
   const handleAddToCart = async () => {
     const token = localStorage.getItem("token");
@@ -163,6 +158,10 @@ export default function ActivityDetail() {
           alt={activity.title}
           className="w-full h-full object-cover"
           loading="lazy"
+          onError={(e) => {
+            e.currentTarget.onerror = null;
+            e.currentTarget.src = FALLBACK_ACTIVITY_IMAGE;
+          }}
         />
       </div>
 

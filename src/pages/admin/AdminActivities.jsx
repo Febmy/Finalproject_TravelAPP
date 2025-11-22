@@ -2,9 +2,10 @@
 import { useEffect, useState } from "react";
 import api from "../../lib/api.js";
 import { useToast } from "../../context/ToastContext.jsx";
+import { formatCurrency } from "../../lib/format.js";
 import Spinner from "../../components/ui/Spinner.jsx";
 import EmptyState from "../../components/ui/EmptyState.jsx";
-import AdminLayout from "../../components/AdminLayout.jsx";
+import AdminLayout from "../../components/layout/AdminLayout.jsx";
 
 // ==================== KONFIG ENDPOINT ====================
 const CREATE_ACTIVITY_ENDPOINT = "/create-activity";
@@ -12,29 +13,10 @@ const UPDATE_ACTIVITY_ENDPOINT = "/update-activity"; // dipakai: `${UPDATE_ACTIV
 const DELETE_ACTIVITY_ENDPOINT = "/delete-activity"; // dipakai: `${DELETE_ACTIVITY_ENDPOINT}/${id}`;
 
 // ==================== HELPER ====================
-function formatCurrency(value) {
-  if (value == null) return "-";
-  const num = Number(value);
-  if (Number.isNaN(num)) return "-";
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(num);
-}
 
 function extractErrorMessage(err) {
   const res = err?.response;
   const data = res?.data;
-
-  try {
-    console.log(
-      "create/update-activity error detail JSON:",
-      JSON.stringify(data, null, 2)
-    );
-  } catch {
-    console.log("create/update-activity error detail (raw):", data);
-  }
 
   if (!data)
     return err.message || "Terjadi kesalahan tanpa response dari server.";

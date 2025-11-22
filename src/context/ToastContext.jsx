@@ -1,16 +1,36 @@
 // src/context/ToastContext.jsx
-import { createContext, useContext, useState, useCallback } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useRef,
+} from "react";
 
 const ToastContext = createContext(null);
 
 export function ToastProvider({ children }) {
   const [toast, setToast] = useState(null);
+  const timeoutRef = useRef(null);
 
-  const showToast = useCallback(({ type = "success", message }) => {
-    if (!message) return;
-    setToast({ type, message });
-    setTimeout(() => setToast(null), 3000);
-  }, []);
+  const showToast = useCallback(
+    ({ type = "success", message, duration = 3000 }) => {
+      if (!message) return;
+
+      // Bersihkan timeout sebelumnya kalau ada
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+
+      setToast({ type, message });
+
+      timeoutRef.current = setTimeout(() => {
+        setToast(null);
+        timeoutRef.current = null;
+      }, duration);
+    },
+    []
+  );
 
   return (
     <ToastContext.Provider value={{ showToast }}>
@@ -24,6 +44,8 @@ export function ToastProvider({ children }) {
                 ? "bg-red-50 text-red-700 border-red-200"
                 : "bg-emerald-50 text-emerald-700 border-emerald-200"
             }`}
+            role="status"
+            aria-live="polite"
           >
             {toast.message}
           </div>
@@ -35,6 +57,8 @@ export function ToastProvider({ children }) {
 
 export function useToast() {
   const ctx = useContext(ToastContext);
-  if (!ctx) throw new Error("useToast must be used within ToastProvider");
+  if (!ctx) {
+    throw new Error("useToast must be used within ToastProvider");
+  }
   return ctx;
 }

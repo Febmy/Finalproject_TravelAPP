@@ -7,12 +7,14 @@ export default function Profile() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
   const { showToast } = useToast();
 
   useEffect(() => {
     const loadProfile = async () => {
       try {
-        const res = await api.get("/user"); // GET /api/v1/user
+        // API Travel Journal menyediakan GET /user (bukan PUT)
+        const res = await api.get("/user");
         setUser(res.data.data);
       } catch (err) {
         console.error("Profile error:", err.response?.data || err.message);
@@ -27,7 +29,7 @@ export default function Profile() {
     loadProfile();
   }, [showToast]);
 
-  // LOADING
+  // ===== STATE: LOADING =====
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
@@ -37,7 +39,7 @@ export default function Profile() {
     );
   }
 
-  // ERROR
+  // ===== STATE: ERROR =====
   if (error) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8">
@@ -49,6 +51,7 @@ export default function Profile() {
     );
   }
 
+  // SAFETY: kalau masih belum ada user
   if (!user) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8">
@@ -57,6 +60,7 @@ export default function Profile() {
     );
   }
 
+  // ===== NORMALISASI DATA =====
   const name = user.name || "Traveler";
   const email = user.email || "-";
   const phone = user.phoneNumber || user.phone || "-";
@@ -76,6 +80,7 @@ export default function Profile() {
     .map((n) => n[0]?.toUpperCase())
     .join("");
 
+  // ===== UI =====
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
       {/* HEADER CARD */}
@@ -92,6 +97,7 @@ export default function Profile() {
             {name}
           </h1>
           <p className="text-sm text-slate-600">{email}</p>
+
           <div className="flex flex-wrap items-center gap-2 mt-2">
             <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
               {role === "admin" ? "Admin" : "Regular User"}
@@ -140,8 +146,7 @@ export default function Profile() {
         </div>
 
         <p className="mt-4 text-xs text-slate-500">
-          Data diambil dari endpoint <code>/user</code>. Nanti kalau mau, kita
-          bisa tambahkan fitur edit profile.
+          Data diambil dari endpoint <code>/user</code>.
         </p>
       </section>
     </div>

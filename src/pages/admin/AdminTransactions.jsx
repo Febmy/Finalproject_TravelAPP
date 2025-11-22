@@ -1,28 +1,8 @@
 // src/pages/admin/AdminTransactions.jsx
 import { useEffect, useState } from "react";
 import api from "../../lib/api";
-import AdminLayout from "../../components/AdminLayout.jsx";
-
-function formatDateTime(dateStr) {
-  if (!dateStr) return "-";
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleString("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatCurrency(amount) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(amount || 0);
-}
+import AdminLayout from "../../components/layout/AdminLayout.jsx";
+import { formatCurrency, formatDateTime } from "../../lib/format.js";
 
 // helper ambil total dari berbagai kemungkinan field
 function getTotal(tx) {

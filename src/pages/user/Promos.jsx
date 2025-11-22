@@ -1,17 +1,7 @@
 // src/pages/user/Promos.jsx
 import { useEffect, useState } from "react";
 import api from "../../lib/api";
-
-function formatCurrency(value) {
-  if (value == null) return "-";
-  const num = Number(value);
-  if (Number.isNaN(num)) return "-";
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(num);
-}
+import { formatCurrency } from "../../lib/format.js";
 
 export default function Promos() {
   const [promos, setPromos] = useState([]);
@@ -23,7 +13,7 @@ export default function Promos() {
       try {
         setLoading(true);
         setError("");
-        const res = await api.get("/promos");
+        const res = await api.get("/promos"); // GET /api/v1/promos
         setPromos(res.data?.data || []);
       } catch (err) {
         console.error("Promos page error:", err.response?.data || err.message);

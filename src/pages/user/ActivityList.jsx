@@ -1,18 +1,8 @@
 // src/pages/user/ActivityList.jsx
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import api from "../../lib/api.js"; // eslint-disable-line no-unused-vars />
-
-function formatCurrency(value) {
-  if (value == null) return "-";
-  const num = Number(value);
-  if (Number.isNaN(num)) return "-";
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(num);
-}
+import api from "../../lib/api.js";
+import ActivityCard from "../../components/activity/ActivityCard.jsx";
+import { formatCurrency } from "../../lib/format.js";
 
 export default function ActivityList() {
   const [activities, setActivities] = useState([]);
@@ -30,7 +20,7 @@ export default function ActivityList() {
         setError("");
 
         const [actRes, promoRes] = await Promise.all([
-          api.get("/activities?limit=50"),
+          api.get("/activities"),
           api.get("/promos"),
         ]);
 
@@ -47,41 +37,34 @@ export default function ActivityList() {
     load();
   }, []);
 
-  const getActivityImage = (act) =>
-    act?.imageUrl ||
-    (Array.isArray(act?.imageUrls) && act.imageUrls[0]) ||
-    act?.thumbnail ||
-    "https://images.pexels.com/photos/258154/pexels-photo-258154.jpeg?auto=compress&cs=tinysrgb&w=1200";
-
   const filteredActivities = activities.filter((act) => {
     const q = search.trim().toLowerCase();
 
     const matchesSearch =
       !q ||
       act.title?.toLowerCase().includes(q) ||
-      act.location?.toLowerCase().includes(q) ||
-      act.category?.name?.toLowerCase().includes(q);
+      act.location?.toLowerCase().includes(q);
 
+    const price = act.price || 0;
     let matchesFilter = true;
+
     if (filter === "budget") {
-      matchesFilter = (act.price || 0) <= 500000;
+      matchesFilter = price <= 500_000;
     } else if (filter === "premium") {
-      matchesFilter = (act.price || 0) > 500000;
+      matchesFilter = price > 500_000;
     }
 
     return matchesSearch && matchesFilter;
   });
 
+  // === LOADING ===
   if (loading) {
     return (
-      <div className="max-w-6xl mx-auto px-4 py-8 space-y-4">
-        <div className="h-8 w-40 bg-slate-200 rounded-full animate-pulse" />
-        <div className="h-5 w-64 bg-slate-200 rounded-full animate-pulse" />
-        <div className="flex gap-2 mt-4">
-          <div className="h-9 w-16 bg-slate-200 rounded-full animate-pulse" />
-          <div className="h-9 w-20 bg-slate-200 rounded-full animate-pulse" />
-          <div className="h-9 w-24 bg-slate-200 rounded-full animate-pulse" />
-        </div>
+      <div className="max-w-6xl mx-auto px-4 py-6 md:py-8 space-y-4">
+        <div className="h-5 w-24 bg-slate-200 rounded-full animate-pulse" />
+        <div className="h-7 w-64 bg-slate-200 rounded-full animate-pulse" />
+        <div className="h-4 w-80 bg-slate-200 rounded-full animate-pulse" />
+        <div className="h-4 w-48 bg-slate-200 rounded-full animate-pulse" />
         <div className="space-y-3 mt-4">
           <div className="h-24 bg-slate-200 rounded-2xl animate-pulse" />
           <div className="h-24 bg-slate-200 rounded-2xl animate-pulse" />
@@ -91,6 +74,24 @@ export default function ActivityList() {
     );
   }
 
+  // === ERROR ===
+  if (error) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-6 md:py-8 space-y-3">
+        <header className="space-y-1">
+          <p className="text-[11px] uppercase tracking-[0.25em] text-slate-500">
+            Activities
+          </p>
+          <h1 className="text-xl md:text-2xl font-semibold text-slate-900">
+            Temukan aktivitas untuk perjalananmu
+          </h1>
+        </header>
+        <p className="text-sm text-red-600">{error}</p>
+      </div>
+    );
+  }
+
+  // === NORMAL UI ===
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 md:py-8 space-y-6">
       {/* HEADER */}
@@ -119,32 +120,35 @@ export default function ActivityList() {
             Promo
           </p>
           <div className="flex gap-3 overflow-x-auto scrollbar-none">
-            {promos.slice(0, 4).map((promo) => (
-              <div
-                key={promo.id}
-                className="min-w-[220px] bg-slate-800/70 rounded-2xl p-3 border border-slate-700"
-              >
-                <p className="text-xs font-semibold line-clamp-2">
-                  {promo.title || promo.name}
-                </p>
-                {promo.promoCode && (
-                  <p className="mt-2 inline-flex items-center rounded-full bg-slate-100 text-slate-900 text-[10px] px-2 py-0.5">
-                    Code: {promo.promoCode}
+            {promos.slice(0, 4).map((promo) => {
+              const code = promo.promo_code || promo.promoCode;
+              const min = promo.minimum_claim_price ?? promo.minimumClaimPrice;
+              const discount =
+                promo.promo_discount_price ?? promo.promoDiscountPrice;
+
+              return (
+                <div
+                  key={promo.id}
+                  className="min-w-[220px] bg-slate-800/70 rounded-2xl p-3 border border-slate-700"
+                >
+                  <p className="text-xs font-semibold line-clamp-2">
+                    {promo.title || promo.name}
                   </p>
-                )}
-                <p className="mt-1 text-[11px] text-slate-300">
-                  Min. transaksi:{" "}
-                  {promo.minimumClaimPrice
-                    ? formatCurrency(promo.minimumClaimPrice)
-                    : "-"}
-                  <br />
-                  Potongan:{" "}
-                  {promo.promoDiscountPrice
-                    ? formatCurrency(promo.promoDiscountPrice)
-                    : "-"}
-                </p>
-              </div>
-            ))}
+
+                  {code && (
+                    <p className="mt-2 inline-flex items-center rounded-full bg-slate-100 text-slate-900 text-[10px] px-2 py-0.5">
+                      Code: {code}
+                    </p>
+                  )}
+
+                  <p className="mt-1 text-[11px] text-slate-300">
+                    Min. transaksi: {min ? formatCurrency(min) : "-"}
+                    <br />
+                    Potongan: {discount ? formatCurrency(discount) : "-"}
+                  </p>
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
@@ -187,70 +191,22 @@ export default function ActivityList() {
           </button>
         </div>
 
-        <div className="w-full md:max-w-xs">
+        <div className="w-full md:w-64 flex items-center gap-2 rounded-full bg-white border border-slate-200 px-3 py-1.5">
+          <span className="text-slate-400 text-xs">🔍</span>
           <input
             type="text"
-            placeholder="Cari judul / lokasi / kategori..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-full border border-slate-200 bg-white px-3 py-2 text-xs md:text-sm focus:outline-none focus:ring-1 focus:ring-slate-400"
+            placeholder="Cari aktivitas atau lokasi..."
+            className="flex-1 bg-transparent text-xs md:text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none"
           />
         </div>
       </section>
 
-      {/* ERROR */}
-      {error && (
-        <p className="text-xs md:text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
-          {error}
-        </p>
-      )}
-
       {/* LIST AKTIVITAS */}
       <section className="space-y-3">
         {filteredActivities.map((act) => (
-          <Link
-            key={act.id}
-            to={`/activity/${act.id}`}
-            className="flex gap-3 md:gap-4 bg-white rounded-2xl border border-slate-200 hover:border-slate-300 hover:shadow-sm transition shadow-xs p-3 md:p-4"
-          >
-            <div className="w-24 h-24 md:w-32 md:h-24 rounded-xl overflow-hidden bg-slate-100 shrink-0">
-              <img
-                src={getActivityImage(act)}
-                alt={act.title}
-                className="w-full h-full object-cover"
-                loading="lazy"
-              />
-            </div>
-
-            <div className="flex-1 flex flex-col justify-between">
-              <div className="space-y-1">
-                <h2 className="text-sm md:text-base font-semibold text-slate-900">
-                  {act.title}
-                </h2>
-                {act.location && (
-                  <p className="text-[11px] md:text-xs text-slate-500">
-                    {act.location}
-                  </p>
-                )}
-                <div className="flex flex-wrap items-center gap-1 mt-1">
-                  {act.category?.name && (
-                    <span className="inline-flex items-center rounded-full bg-slate-100 text-slate-700 text-[10px] px-2 py-0.5">
-                      {act.category.name}
-                    </span>
-                  )}
-                  {act.price != null && (
-                    <span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 text-[10px] px-2 py-0.5">
-                      {formatCurrency(act.price)}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <p className="text-[11px] md:text-xs text-slate-500 line-clamp-2 mt-1">
-                {act.description || "Aktivitas seru untuk perjalananmu."}
-              </p>
-            </div>
-          </Link>
+          <ActivityCard key={act.id} activity={act} />
         ))}
 
         {filteredActivities.length === 0 && (
