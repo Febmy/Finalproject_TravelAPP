@@ -12,6 +12,10 @@ const CREATE_ACTIVITY_ENDPOINT = "/create-activity";
 const UPDATE_ACTIVITY_ENDPOINT = "/update-activity"; // dipakai: `${UPDATE_ACTIVITY_ENDPOINT}/${id}`
 const DELETE_ACTIVITY_ENDPOINT = "/delete-activity"; // dipakai: `${DELETE_ACTIVITY_ENDPOINT}/${id}`;
 
+// NOTE: GANTI endpoint ini dengan yang mentor kasih di Postman
+// misal: "/upload-image" atau "/upload-activity-image"
+const UPLOAD_ACTIVITY_IMAGE_ENDPOINT = "/upload-image";
+
 // ==================== HELPER ====================
 
 function extractErrorMessage(err) {
@@ -39,6 +43,41 @@ function extractErrorMessage(err) {
   return "Gagal menyimpan aktivitas: " + JSON.stringify(data);
 }
 
+// Upload banyak gambar, balikan array URL
+async function uploadActivityImages(files) {
+  const uploaded = [];
+
+  for (const file of files) {
+    try {
+      const formData = new FormData();
+      // nama field "image" sesuai pesan error backend yg pakai req.files.image
+      formData.append("image", file);
+
+      // ⬇️ JANGAN set header di sini, biarkan interceptor + axios yg urus
+      const res = await api.post(UPLOAD_ACTIVITY_IMAGE_ENDPOINT, formData);
+      console.log("Upload image response:", res.data);
+
+      const url =
+        res.data?.data?.url ||
+        res.data?.data?.imageUrl ||
+        res.data?.url ||
+        res.data?.imageUrl;
+
+      if (url) {
+        uploaded.push(url);
+      } else {
+        console.warn("Upload berhasil tapi URL tidak ditemukan di response.");
+      }
+    } catch (err) {
+      console.error("Upload image gagal:", err.response?.data || err.message);
+      // Untuk sekarang: kalau upload gagal, hentikan upload & kembalikan []
+      return [];
+    }
+  }
+
+  return uploaded;
+}
+
 // ==================== KOMPONEN UTAMA ====================
 
 const initialForm = {
@@ -46,7 +85,7 @@ const initialForm = {
   description: "",
   location: "",
   price: "",
-  imageUrl: "",
+  imageUrl: "", // URL manual (opsional)
   categoryId: "", // string UUID dari dropdown
 };
 
@@ -62,6 +101,9 @@ export default function AdminActivities() {
   const [form, setForm] = useState(initialForm);
   const [editing, setEditing] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // NEW: file-file gambar yang mau di-upload
+  const [imageFiles, setImageFiles] = useState([]);
 
   const { showToast } = useToast();
 
@@ -110,6 +152,7 @@ export default function AdminActivities() {
   const resetForm = () => {
     setForm(initialForm);
     setEditing(null);
+    setImageFiles([]); // NEW: reset file
   };
 
   const startCreate = () => {
@@ -132,7 +175,13 @@ export default function AdminActivities() {
       categoryId:
         activity.categoryId != null ? String(activity.categoryId) : "",
     });
+    setImageFiles([]); // NEW: tidak otomatis preload file, kita hanya tampilkan URL
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleFileChange = (e) => {
+    const files = Array.from(e.target.files || []);
+    setImageFiles(files);
   };
 
   // -------- Submit create / update --------
@@ -181,15 +230,36 @@ export default function AdminActivities() {
       payload.price = priceValue;
     }
 
-    if (form.imageUrl) {
-      payload.imageUrl = form.imageUrl;
-      payload.imageUrls = [form.imageUrl];
-    }
-
-    const isEditing = Boolean(editing?.id);
-
+    // ====== HANDLE GAMBAR ======
     try {
       setIsSubmitting(true);
+      let finalImageUrls = [];
+
+      if (imageFiles.length > 0) {
+        const uploaded = await uploadActivityImages(imageFiles);
+
+        if (!uploaded.length) {
+          // upload gagal → JANGAN blokir form
+          showToast({
+            type: "error",
+            message:
+              "Upload gambar ke API gagal (server error). Untuk sementara, kosongkan upload file dan gunakan kolom URL manual.",
+          });
+          // finalImageUrls tetap [], jadi activity tetap bisa disimpan tanpa imageUrls
+        } else {
+          finalImageUrls = uploaded;
+        }
+      } else if (form.imageUrl) {
+        // fallback: hanya URL manual satu
+        finalImageUrls = [form.imageUrl];
+      }
+
+      if (finalImageUrls.length > 0) {
+        payload.imageUrl = finalImageUrls[0];
+        payload.imageUrls = finalImageUrls;
+      }
+
+      const isEditing = Boolean(editing?.id);
 
       if (isEditing) {
         // sesuai Postman: update-activity pakai POST
@@ -382,10 +452,10 @@ export default function AdminActivities() {
               />
             </div>
 
-            {/* IMAGE URL */}
+            {/* IMAGE URL MANUAL */}
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-slate-600">
-                Gambar (URL)
+                Gambar (URL) – opsional
               </label>
               <input
                 type="text"
@@ -399,7 +469,7 @@ export default function AdminActivities() {
               {form.imageUrl && (
                 <div className="mt-2">
                   <p className="text-[11px] text-slate-500 mb-1">
-                    Preview gambar:
+                    Preview URL:
                   </p>
                   <div className="w-full h-32 rounded-xl overflow-hidden bg-slate-100">
                     <img
@@ -412,6 +482,46 @@ export default function AdminActivities() {
                           "https://images.pexels.com/photos/346885/pexels-photo-346885.jpeg?auto=compress&cs=tinysrgb&w=1200";
                       }}
                     />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* NEW: FILE UPLOAD MULTI */}
+            <div className="space-y-1">
+              <label className="block text-[11px] font-medium text-slate-600">
+                Upload Gambar (boleh lebih dari satu)
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleFileChange}
+                className="block w-full text-[11px] md:text-xs text-slate-600"
+              />
+              <p className="text-[10px] text-slate-500">
+                Jika memilih file, gambar akan di-upload dan URL-nya otomatis
+                disimpan sebagai <code>imageUrls</code>.
+              </p>
+
+              {imageFiles.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-[11px] text-slate-500 mb-1">
+                    Preview gambar yang akan di-upload:
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {imageFiles.map((file, idx) => (
+                      <div
+                        key={idx}
+                        className="h-20 rounded-lg overflow-hidden bg-slate-100"
+                      >
+                        <img
+                          src={URL.createObjectURL(file)}
+                          alt={file.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

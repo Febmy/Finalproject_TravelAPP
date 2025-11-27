@@ -1,4 +1,3 @@
-// src/pages/admin/AdminPromos.jsx
 import { useEffect, useState } from "react";
 import api from "../../lib/api.js";
 import AdminLayout from "../../components/layout/AdminLayout.jsx";
@@ -11,8 +10,6 @@ import { formatCurrency } from "../../lib/format.js";
 const extractErrorMessage = (err) => {
   const res = err?.response;
   const data = res?.data;
-
-  // 🔍 Paksa tampilkan detail JSON di console:
 
   if (!data)
     return err.message || "Terjadi kesalahan tanpa response dari server.";

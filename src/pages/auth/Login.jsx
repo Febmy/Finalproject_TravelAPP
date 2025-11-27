@@ -55,7 +55,11 @@ export default function Login() {
       localStorage.setItem("userProfile", JSON.stringify(user));
 
       showToast({ type: "success", message: "Login berhasil." });
-      navigate("/");
+      if (data?.role === "admin") {
+        navigate("/admin", { replace: true });
+      } else {
+        navigate("/", { replace: true });
+      }
     } catch (err) {
       console.error("Login error:", err.response?.data || err.message);
       const msg =

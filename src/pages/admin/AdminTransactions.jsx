@@ -1,4 +1,3 @@
-// src/pages/admin/AdminTransactions.jsx
 import { useEffect, useState } from "react";
 import api from "../../lib/api";
 import AdminLayout from "../../components/layout/AdminLayout.jsx";
@@ -23,6 +22,10 @@ export default function AdminTransactions() {
   const [error, setError] = useState("");
   const [updatingId, setUpdatingId] = useState(null);
 
+  // pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 10; // bebas: 5/8/10
+
   // ambil SEMUA transaksi
   useEffect(() => {
     const load = async () => {
@@ -43,11 +46,30 @@ export default function AdminTransactions() {
     load();
   }, []);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, transactions.length]);
+  // sort by tanggal terbaru (createdAt / updatedAt / transactionDate)
+  const sorted = [...transactions].sort((a, b) => {
+    const dateA = new Date(
+      a.createdAt || a.updatedAt || a.transactionDate || a.date || 0
+    );
+    const dateB = new Date(
+      b.createdAt || b.updatedAt || b.transactionDate || b.date || 0
+    );
+    return dateB - dateA; // DESC: terbaru dulu
+  });
+
   // filter berdasar status
-  const filtered = transactions.filter((tx) => {
+  const filtered = sorted.filter((tx) => {
     if (statusFilter === "all") return true;
     return (tx.status || "").toLowerCase() === statusFilter;
   });
+
+  // pagination
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE || 1));
+  const startIndex = (currentPage - 1) * PAGE_SIZE;
+  const paginated = filtered.slice(startIndex, startIndex + PAGE_SIZE);
 
   // hitung total revenue HANYA untuk status sukses / paid
   const totalRevenue = filtered.reduce((sum, tx) => {
@@ -144,7 +166,7 @@ export default function AdminTransactions() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((tx) => {
+              {paginated.map((tx) => {
                 const pm = tx.paymentMethod || tx.payment_method || null;
                 const total = getTotal(tx);
                 const statusLower = (tx.status || "").toLowerCase();
@@ -248,6 +270,46 @@ export default function AdminTransactions() {
               )}
             </tbody>
           </table>
+          {filtered.length > PAGE_SIZE && (
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mt-4 text-xs md:text-sm">
+              <p className="text-slate-500">
+                Menampilkan{" "}
+                <span className="font-semibold">
+                  {filtered.length === 0 ? 0 : startIndex + 1}–
+                  {Math.min(startIndex + PAGE_SIZE, filtered.length)}
+                </span>{" "}
+                dari <span className="font-semibold">{filtered.length}</span>{" "}
+                transaksi
+              </p>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-2 py-1 rounded-lg border text-slate-600 disabled:opacity-50"
+                >
+                  Prev
+                </button>
+
+                <span className="text-slate-500">
+                  Page <span className="font-semibold">{currentPage}</span> /{" "}
+                  <span className="font-semibold">{totalPages}</span>
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCurrentPage((p) => Math.min(totalPages, p + 1))
+                  }
+                  disabled={currentPage === totalPages}
+                  className="px-2 py-1 rounded-lg border text-slate-600 disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </AdminLayout>

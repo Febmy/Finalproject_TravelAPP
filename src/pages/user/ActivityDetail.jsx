@@ -4,16 +4,21 @@ import { useParams, useNavigate } from "react-router-dom";
 import api from "../../lib/api.js";
 import { useToast } from "../../context/ToastContext.jsx";
 import { formatCurrency } from "../../lib/format.js";
+
 const FALLBACK_ACTIVITY_IMAGE =
   "https://images.pexels.com/photos/258154/pexels-photo-258154.jpeg?auto=compress&cs=tinysrgb&w=1200";
 
-function getImage(act) {
-  return (
-    act?.imageUrl ||
-    (Array.isArray(act?.imageUrls) && act.imageUrls[0]) ||
-    act?.thumbnail ||
-    FALLBACK_ACTIVITY_IMAGE
-  );
+function getImageList(act) {
+  if (!act) return [FALLBACK_ACTIVITY_IMAGE];
+
+  if (Array.isArray(act.imageUrls) && act.imageUrls.length > 0) {
+    return act.imageUrls;
+  }
+
+  if (act.imageUrl) return [act.imageUrl];
+  if (act.thumbnail) return [act.thumbnail];
+
+  return [FALLBACK_ACTIVITY_IMAGE];
 }
 
 export default function ActivityDetail() {
@@ -26,6 +31,14 @@ export default function ActivityDetail() {
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
+
+  const imageList = getImageList(activity);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  // reset index gambar setiap pindah ke activity lain
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [id]);
 
   useEffect(() => {
     const load = async () => {
@@ -151,18 +164,43 @@ export default function ActivityDetail() {
         </div>
       </header>
 
-      {/* Image */}
-      <div className="w-full h-52 md:h-72 rounded-3xl overflow-hidden bg-slate-100">
-        <img
-          src={getImage(activity)}
-          alt={activity.title}
-          className="w-full h-full object-cover"
-          loading="lazy"
-          onError={(e) => {
-            e.currentTarget.onerror = null;
-            e.currentTarget.src = FALLBACK_ACTIVITY_IMAGE;
-          }}
-        />
+      {/* Image + thumbnails */}
+      <div className="space-y-3">
+        <div className="w-full h-52 md:h-72 rounded-3xl overflow-hidden bg-slate-100">
+          <img
+            src={imageList[activeIndex]}
+            alt={activity.title}
+            className="w-full h-full object-cover"
+            loading="lazy"
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = FALLBACK_ACTIVITY_IMAGE;
+            }}
+          />
+        </div>
+
+        {imageList.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {imageList.map((url, idx) => (
+              <button
+                type="button"
+                key={idx}
+                onClick={() => setActiveIndex(idx)}
+                className={`h-16 w-24 rounded-xl overflow-hidden border ${
+                  idx === activeIndex
+                    ? "border-slate-900"
+                    : "border-slate-200 opacity-70 hover:opacity-100"
+                }`}
+              >
+                <img
+                  src={url}
+                  alt={`Thumbnail ${idx + 1}`}
+                  className="w-full h-full object-cover"
+                />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Content */}

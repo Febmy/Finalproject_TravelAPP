@@ -36,6 +36,15 @@ export default function Transactions() {
       setLoading(true);
       const res = await api.get("/my-transactions");
       setTransactions(res.data.data || []);
+      const sorted = [...raw].sort((a, b) => {
+        const dateA = new Date(
+          a.createdAt || a.updatedAt || a.transactionDate || a.date || 0
+        );
+        const dateB = new Date(
+          b.createdAt || b.updatedAt || b.transactionDate || b.date || 0
+        );
+        return dateB - dateA; // DESC
+      });
     } catch (err) {
       console.error(
         "Error load transactions:",

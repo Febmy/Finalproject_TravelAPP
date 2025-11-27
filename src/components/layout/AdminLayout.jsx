@@ -1,10 +1,12 @@
 // src/components/AdminLayout.jsx
 import { NavLink, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { useToast } from "../../context/ToastContext.jsx";
 
 export default function AdminLayout({ title, children }) {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
+  const { showToast } = useToast();
 
   useEffect(() => {
     const raw = localStorage.getItem("userProfile");
@@ -15,6 +17,13 @@ export default function AdminLayout({ title, children }) {
       setUser(null);
     }
   }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("userProfile");
+    showToast?.({ type: "success", message: "Berhasil logout." });
+    navigate("/login");
+  };
 
   const menu = [
     { to: "/admin", label: "Dashboard" },
@@ -69,10 +78,10 @@ export default function AdminLayout({ title, children }) {
             ))}
             <button
               type="button"
-              onClick={() => navigate("/")}
-              className="mt-3 w-full px-3 py-2 text-sm rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
+              onClick={handleLogout}
+              className="mt-3 w-full px-3 py-2 text-sm rounded-xl border border-red-200 text-red-600 hover:bg-red-50"
             >
-              ← Kembali ke User App
+              Logout
             </button>
           </nav>
         </aside>

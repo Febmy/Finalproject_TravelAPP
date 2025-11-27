@@ -1,5 +1,5 @@
 // src/App.jsx
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 // LAYOUT
 import Navbar from "./components/layout/Navbar.jsx";
@@ -62,56 +62,113 @@ function RequireAdmin({ children }) {
   return children;
 }
 
+function BlockAdminOnUserRoute({ children }) {
+  // Cek profile di localStorage
+  const rawProfile = localStorage.getItem("userProfile");
+  if (!rawProfile) return children; // belum login → boleh lihat halaman user
+
+  try {
+    const profile = JSON.parse(rawProfile);
+    // Kalau role admin → paksa ke halaman admin
+    if (profile?.role === "admin") {
+      return <Navigate to="/admin" replace />;
+    }
+  } catch (err) {
+    console.error("Failed to parse userProfile", err);
+  }
+
+  return children;
+}
+
 export default function App() {
+  const location = useLocation();
+  const isAdminRoute = location.pathname.startsWith("/admin");
   return (
     <>
       {/* ScrollToTop cukup di sini */}
       <ScrollToTop />
-
-      <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
-        <Navbar />
+      <div className="min-h-screen flex flex-col bg-slate-50">
+        {/* Navbar hanya untuk route NON-admin */}
+        {!isAdminRoute && <Navbar />}
 
         <PageContainer>
           <Routes>
             {/* PUBLIC */}
-            <Route path="/" element={<Home />} />
-            <Route path="/activity" element={<ActivityList />} />
-            <Route path="/activity/:id" element={<ActivityDetail />} />
+            <Route
+              path="/"
+              element={
+                <BlockAdminOnUserRoute>
+                  <Home />
+                </BlockAdminOnUserRoute>
+              }
+            />
+
+            <Route
+              path="/activity"
+              element={
+                <BlockAdminOnUserRoute>
+                  <ActivityList />
+                </BlockAdminOnUserRoute>
+              }
+            />
+            <Route
+              path="/activity/:id"
+              element={
+                <BlockAdminOnUserRoute>
+                  <ActivityDetail />
+                </BlockAdminOnUserRoute>
+              }
+            />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
-            <Route path="/promos" element={<Promos />} />
+            <Route
+              path="/promos"
+              element={
+                <BlockAdminOnUserRoute>
+                  <Promos />
+                </BlockAdminOnUserRoute>
+              }
+            />
 
             {/* USER PROTECTED */}
             <Route
               path="/cart"
               element={
-                <RequireAuth>
-                  <Cart />
-                </RequireAuth>
+                <BlockAdminOnUserRoute>
+                  <RequireAuth>
+                    <Cart />
+                  </RequireAuth>
+                </BlockAdminOnUserRoute>
               }
             />
             <Route
               path="/checkout"
               element={
-                <RequireAuth>
-                  <Checkout />
-                </RequireAuth>
+                <BlockAdminOnUserRoute>
+                  <RequireAuth>
+                    <Checkout />
+                  </RequireAuth>
+                </BlockAdminOnUserRoute>
               }
             />
             <Route
               path="/transactions"
               element={
-                <RequireAuth>
-                  <Transactions />
-                </RequireAuth>
+                <BlockAdminOnUserRoute>
+                  <RequireAuth>
+                    <Transactions />
+                  </RequireAuth>
+                </BlockAdminOnUserRoute>
               }
             />
             <Route
               path="/profile"
               element={
-                <RequireAuth>
-                  <Profile />
-                </RequireAuth>
+                <BlockAdminOnUserRoute>
+                  <RequireAuth>
+                    <Profile />
+                  </RequireAuth>
+                </BlockAdminOnUserRoute>
               }
             />
 
@@ -161,8 +218,8 @@ export default function App() {
             <Route path="*" element={<NotFound />} />
           </Routes>
         </PageContainer>
-
-        <Footer />
+        {/* Footer hanya untuk route NON-admin */}
+        {!isAdminRoute && <Footer />}
       </div>
     </>
   );
