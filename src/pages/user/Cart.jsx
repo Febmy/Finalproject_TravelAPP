@@ -42,35 +42,47 @@ export default function Cart() {
     fetchCart();
   }, []);
 
-  const changeQty = (id, delta) => {
-    setItems((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              quantity: Math.max(1, (item.quantity || 1) + delta),
-            }
-          : item
-      )
-    );
-  };
+  // di atas: import api, useToast, dll
 
-  const handleRemove = async (id) => {
-    const ok = window.confirm("Hapus item ini dari keranjang?");
-    if (!ok) return;
-
+  const changeQty = async (id, delta) => {
     try {
-      await api.delete(`/delete-cart/${id}`);
-      setItems((prev) => prev.filter((item) => item.id !== id));
-      showToast({
-        type: "success",
-        message: "Item dihapus dari keranjang.",
+      // cari item sekarang
+      const current = items.find((it) => it.id === id);
+      if (!current) return;
+
+      const newQty = Math.max(1, (current.quantity || 1) + delta);
+
+      // update ke server dulu
+      await api.post(`/update-cart/${id}`, { quantity: newQty });
+
+      // kalau sukses, update state + localStorage
+      setItems((prev) => {
+        const next = prev.map((it) =>
+          it.id === id ? { ...it, quantity: newQty } : it
+        );
+        // simpan ke localStorage supaya kalau reload tetap
+        try {
+          const map = {};
+          next.forEach((it) => {
+            map[it.id] = it.quantity || 1;
+          });
+          localStorage.setItem(
+            "travelapp_cart_quantities",
+            JSON.stringify(map)
+          );
+        } catch {
+          // ignore
+        }
+        return next;
       });
     } catch (err) {
-      console.error("Delete cart error:", err.response?.data || err.message);
+      console.error(
+        "Update cart quantity error:",
+        err.response?.data || err.message
+      );
       showToast({
         type: "error",
-        message: "Gagal menghapus item dari keranjang.",
+        message: "Gagal mengubah jumlah. Coba lagi sebentar.",
       });
     }
   };

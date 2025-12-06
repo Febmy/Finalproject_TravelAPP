@@ -1,4 +1,4 @@
-// src/pages/Transactions.jsx
+// src/pages/user/Transactions.jsx  (atau src/pages/Transactions.jsx)
 import { useEffect, useState } from "react";
 import api from "../../lib/api.js";
 import { useToast } from "../../context/ToastContext.jsx";
@@ -6,7 +6,7 @@ import Spinner from "../../components/ui/Spinner.jsx";
 import EmptyState from "../../components/ui/EmptyState.jsx";
 import { formatCurrency, formatDateTime } from "../../lib/format.js";
 
-// Helper: hitung jumlah item di transaksi
+// Helper: hitung jumlah item di transaksi (tidak mengubah total)
 function getItemCount(tx) {
   if (Array.isArray(tx.carts) && tx.carts.length > 0) {
     return tx.carts.reduce((sum, cart) => sum + (cart.quantity || 1), 0);
@@ -34,8 +34,11 @@ export default function Transactions() {
   const fetchTransactions = async () => {
     try {
       setLoading(true);
+
       const res = await api.get("/my-transactions");
-      setTransactions(res.data.data || []);
+      const raw = res.data?.data || [];
+
+      // SORT dari yang terbaru ke yang lama (tanpa utak-atik totalAmount)
       const sorted = [...raw].sort((a, b) => {
         const dateA = new Date(
           a.createdAt || a.updatedAt || a.transactionDate || a.date || 0
@@ -43,8 +46,10 @@ export default function Transactions() {
         const dateB = new Date(
           b.createdAt || b.updatedAt || b.transactionDate || b.date || 0
         );
-        return dateB - dateA; // DESC
+        return dateB - dateA; // DESC (baru duluan)
       });
+
+      setTransactions(sorted);
     } catch (err) {
       console.error(
         "Error load transactions:",
@@ -94,8 +99,6 @@ export default function Transactions() {
     return tx.status === activeFilter;
   });
 
-  // --- UI ---
-
   return (
     <section className="space-y-6">
       {/* HEADER */}
@@ -141,11 +144,13 @@ export default function Transactions() {
             const itemCount = getItemCount(tx);
             const firstCart = tx.carts?.[0];
             const firstActivity = firstCart?.activity;
+
             const title = firstActivity?.title || "Activity";
             const imageUrl =
-              firstActivity?.imageUrl || // <- dari admin (single url)
-              firstActivity?.imageUrls?.[0] || // array url
-              firstActivity?.image || // field lain kalau ada
+              firstActivity?.imageUrl ||
+              (Array.isArray(firstActivity?.imageUrls) &&
+                firstActivity.imageUrls[0]) ||
+              firstActivity?.image ||
               "https://images.pexels.com/photos/258154/pexels-photo-258154.jpeg?auto=compress&cs=tinysrgb&w=1200";
 
             const status = tx.status || "pending";

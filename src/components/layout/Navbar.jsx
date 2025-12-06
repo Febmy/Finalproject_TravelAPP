@@ -1,342 +1,376 @@
 // src/components/layout/Navbar.jsx
 import { useEffect, useState } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "../../context/ToastContext.jsx";
+import api from "../../lib/api.js";
+
+function classNames(...classes) {
+  return classes.filter(Boolean).join(" ");
+}
 
 export default function Navbar() {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [userName, setUserName] = useState("");
-  const [userRole, setUserRole] = useState("");
-  const [cartCount, setCartCount] = useState(0);
-
   const location = useLocation();
   const navigate = useNavigate();
   const { showToast } = useToast();
 
-  const isLoggedIn = Boolean(localStorage.getItem("token"));
+  const [profile, setProfile] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [cartCount, setCartCount] = useState(0);
+  const [notifCount, setNotifCount] = useState(0);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  // ambil data user + cart dari localStorage
+  // ==== Ambil profile dari localStorage ====
   useEffect(() => {
     try {
       const raw = localStorage.getItem("userProfile");
-      if (raw) {
-        const user = JSON.parse(raw);
-        setUserName(user.name || "");
-        setUserRole(user.role || "");
-      } else {
-        setUserName("");
-        setUserRole("");
+      if (!raw) {
+        setProfile(null);
+        setIsAdmin(false);
+        return;
       }
-    } catch {
-      setUserName("");
-      setUserRole("");
+      const user = JSON.parse(raw);
+      setProfile(user);
+      const role = user.role || user.userRole || "";
+      setIsAdmin(role === "admin");
+    } catch (err) {
+      console.error("Failed to parse userProfile:", err);
+      setProfile(null);
+      setIsAdmin(false);
     }
-
-    try {
-      const rawCart = localStorage.getItem("cart");
-      if (rawCart) {
-        const cart = JSON.parse(rawCart);
-        setCartCount(Array.isArray(cart) ? cart.length : 0);
-      } else {
-        setCartCount(0);
-      }
-    } catch {
-      setCartCount(0);
-    }
-
-    // setiap pindah halaman, sidebar otomatis ditutup
-    setIsSidebarOpen(false);
   }, [location.pathname]);
 
+  // ==== Ambil jumlah cart (user saja) ====
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token || isAdmin) {
+      setCartCount(0);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function fetchCartCount() {
+      try {
+        const res = await api.get("/carts");
+        const carts = res.data?.data || [];
+        const totalQty = carts.reduce(
+          (sum, item) => sum + (item.quantity || 1),
+          0
+        );
+
+        if (!cancelled) setCartCount(totalQty);
+      } catch (err) {
+        console.error(
+          "Navbar: gagal ambil cart:",
+          err.response?.data || err.message
+        );
+      }
+    }
+
+    fetchCartCount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin, location.pathname]);
+
+  // ==== Ambil jumlah notifikasi dari /notifications ====
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+
+    // Tidak ada token = belum login → tidak perlu notif
+    // Admin juga tidak perlu notif versi user
+    if (!token || isAdmin) {
+      setNotifCount(0);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function fetchNotifCount() {
+      try {
+        // Pakai endpoint yang sudah ada
+        const res = await api.get("/my-transactions");
+        const list = res.data?.data || [];
+
+        // Hitung transaksi yang masih pending
+        const pending = list.filter((tx) => {
+          const status = (tx.status || tx.paymentStatus || "").toLowerCase();
+          return status === "pending";
+        });
+
+        const count = pending.length;
+
+        if (!cancelled) {
+          setNotifCount(count);
+          // Simpan supaya halaman /notifications bisa baca
+          localStorage.setItem("travelapp_notification_count", String(count));
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setNotifCount(0);
+        }
+        console.error(
+          "Navbar: gagal ambil transaksi untuk notif:",
+          err.response?.data || err.message
+        );
+      }
+    }
+
+    fetchNotifCount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname, isAdmin]);
+
+  // ==== Helper nama user ====
+  const displayName =
+    profile?.name ||
+    profile?.fullName ||
+    profile?.username ||
+    profile?.email ||
+    "Traveler";
+
+  // ==== Logout ====
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("userProfile");
-    showToast?.({ type: "success", message: "Berhasil logout." });
-    navigate("/login");
+    localStorage.removeItem("travelapp_notification_count");
+    setProfile(null);
+    setIsAdmin(false);
+    setCartCount(0);
+    setNotifCount(0);
+
+    navigate("/login", { replace: true });
+    showToast({
+      type: "success",
+      message: "Berhasil logout dari TravelApp.",
+    });
   };
 
-  const mainLinks = [
-    { label: "Home", to: "/" },
-    { label: "Activity", to: "/activity" },
-    { label: "Promo", to: "/promos" },
+  const handleBellClick = () => {
+    navigate("/notifications");
+  };
+
+  const userNavLinks = [
+    { to: "/", label: "Home" },
+    { to: "/activity", label: "Activity" },
+    { to: "/promos", label: "Promo" }, // <== pastikan /promos, bukan /promo
   ];
 
-  return (
-    <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-sm">
-      <nav className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-        {/* BRAND */}
-        <button
-          type="button"
-          onClick={() => navigate("/")}
-          className="flex items-center gap-2"
-        >
-          <div className="h-8 w-8 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-semibold">
-            TA
-          </div>
-          <div className="leading-tight text-left">
-            <p className="text-sm font-semibold tracking-tight text-slate-900">
-              TravelApp
-            </p>
-            <p className="text-[10px] text-slate-400 uppercase tracking-[0.2em]">
-              Smart Travel
-            </p>
-          </div>
-        </button>
+  const adminNavLinks = [
+    { to: "/admin", label: "Dashboard" },
+    { to: "/admin/activities", label: "Activities" },
+    { to: "/admin/promos", label: "Promos" },
+    { to: "/admin/transactions", label: "Transactions" },
+    { to: "/admin/users", label: "Users" },
+  ];
 
-        {/* DESKTOP NAV */}
-        <div className="hidden md:flex items-center gap-8 flex-1 justify-center">
-          {mainLinks.map((link) => (
+  const navLinks = isAdmin ? adminNavLinks : userNavLinks;
+
+  const isLoggedIn = Boolean(localStorage.getItem("token"));
+
+  return (
+    <nav className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-100">
+      <div className="max-w-6xl mx-auto px-4 lg:px-0 h-16 flex items-center justify-between gap-4">
+        {/* Brand */}
+        <div className="flex items-center gap-3">
+          <Link
+            to={isAdmin ? "/admin" : "/"}
+            className="flex items-center gap-2"
+          >
+            <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-xs font-semibold text-white">
+              TA
+            </div>
+            <div className="leading-tight">
+              <p className="text-sm font-semibold text-slate-900">TravelApp</p>
+              <p className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
+                {isAdmin ? "Admin Panel" : "Smart Travel"}
+              </p>
+            </div>
+          </Link>
+        </div>
+
+        {/* Nav links (desktop) */}
+        <div className="hidden md:flex items-center gap-4">
+          {navLinks.map((item) => (
             <NavLink
-              key={link.to}
-              to={link.to}
+              key={item.to}
+              to={item.to}
               className={({ isActive }) =>
-                `text-sm font-medium ${
+                classNames(
+                  "text-sm px-2 py-1 rounded-full transition",
                   isActive
-                    ? "text-sky-600 border-b-2 border-sky-600 pb-1"
-                    : "text-slate-600 hover:text-slate-900"
-                }`
+                    ? "text-slate-900 font-semibold"
+                    : "text-slate-500 hover:text-slate-900"
+                )
               }
             >
-              {link.label}
+              {item.label}
             </NavLink>
           ))}
         </div>
 
-        {/* DESKTOP RIGHT */}
-        <div className="hidden md:flex items-center gap-3">
+        {/* Right section */}
+        <div className="flex items-center gap-3">
+          {/* Notif bell */}
           {isLoggedIn && (
-            <span className="text-xs text-slate-600">
-              Hi,{" "}
-              <span className="font-semibold">{userName || "Traveler"}</span>
-              {userRole === "admin" && (
-                <span className="ml-2 px-2 py-[2px] rounded-full bg-slate-900 text-white text-[10px] uppercase">
-                  Admin
-                </span>
-              )}
-            </span>
-          )}
-
-          {isLoggedIn ? (
-            <>
-              <NavLink
-                to="/cart"
-                className="px-3 py-1.5 rounded-full border text-xs text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1"
-              >
-                Cart
-                {cartCount > 0 && (
-                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-slate-900 text-white text-[10px]">
-                    {cartCount}
-                  </span>
-                )}
-              </NavLink>
-              <NavLink
-                to="/transactions"
-                className="px-3 py-1.5 rounded-full border text-xs text-slate-700 hover:bg-slate-50"
-              >
-                My Transactions
-              </NavLink>
-              <NavLink
-                to="/profile"
-                className="px-3 py-1.5 rounded-full border text-xs text-slate-700 hover:bg-slate-50"
-              >
-                Profile
-              </NavLink>
-              {userRole === "admin" && (
-                <NavLink
-                  to="/admin"
-                  className="px-3 py-1.5 rounded-full border text-xs text-slate-700 hover:bg-slate-50"
-                >
-                  Admin
-                </NavLink>
-              )}
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="px-4 py-1.5 rounded-full bg-red-600 text-white text-xs font-medium hover:bg-black"
-              >
-                Logout
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => navigate("/login")}
-                className="px-3 py-1.5 rounded-full border text-xs text-slate-700 hover:bg-slate-50"
-              >
-                Login
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate("/register")}
-                className="px-4 py-1.5 rounded-full bg-slate-900 text-white text-xs font-medium hover:bg-black"
-              >
-                Sign Up
-              </button>
-            </>
-          )}
-        </div>
-
-        {/* MOBILE HAMBURGER */}
-        <button
-          type="button"
-          onClick={() => setIsSidebarOpen(true)}
-          className="md:hidden h-9 w-9 inline-flex items-center justify-center rounded-full border border-slate-200 text-slate-700"
-          aria-label="Open menu"
-        >
-          <span className="sr-only">Open navigation</span>
-          <div className="space-y-1">
-            <span className="block h-[2px] w-4 bg-slate-800 rounded-full" />
-            <span className="block h-[2px] w-4 bg-slate-800 rounded-full" />
-          </div>
-        </button>
-      </nav>
-
-      {/* MOBILE SIDEBAR: FULLSCREEN, TIDAK TRANSPARAN */}
-      {isSidebarOpen && (
-        <div className="fixed inset-0 z-40 bg-white px-5 pt-5 pb-6 flex flex-col md:hidden">
-          {/* header sidebar */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-semibold">
-                TA
-              </div>
-              <div className="leading-tight">
-                <p className="text-sm font-semibold tracking-tight text-slate-900">
-                  TravelApp
-                </p>
-                <p className="text-[10px] text-slate-400 uppercase tracking-[0.2em]">
-                  Smart Travel
-                </p>
-              </div>
-            </div>
             <button
               type="button"
-              onClick={() => setIsSidebarOpen(false)}
-              className="h-8 w-8 inline-flex items-center justify-center rounded-full border border-slate-200 text-slate-600"
-              aria-label="Close menu"
+              onClick={handleBellClick}
+              className="relative w-9 h-9 rounded-full border border-slate-200 flex items-center justify-center bg-white hover:bg-slate-50"
             >
-              ✕
-            </button>
-          </div>
-
-          {/* user info */}
-          {isLoggedIn && (
-            <div className="mb-4 text-xs text-slate-600">
-              Hi,{" "}
-              <span className="font-semibold">{userName || "Traveler"}</span>
-              {userRole === "admin" && (
-                <span className="ml-2 px-2 py-[2px] rounded-full bg-slate-900 text-white text-[10px] uppercase">
-                  Admin
+              <span className="text-lg">🔔</span>
+              {notifCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[1.1rem] h-[1.1rem] rounded-full bg-red-500 text-[10px] text-white flex items-center justify-center">
+                  {notifCount > 9 ? "9+" : notifCount}
                 </span>
               )}
-            </div>
+            </button>
           )}
 
-          {/* MAIN LINKS */}
-          <div className="space-y-1 mb-4">
-            {mainLinks.map((link) => (
-              <NavLink
-                key={link.to}
-                to={link.to}
-                onClick={() => setIsSidebarOpen(false)}
-                className={({ isActive }) =>
-                  `block px-3 py-2 rounded-lg text-sm ${
-                    isActive
-                      ? "bg-slate-900 text-white"
-                      : "text-slate-700 hover:bg-slate-100"
-                  }`
-                }
-              >
-                {link.label}
-              </NavLink>
-            ))}
-          </div>
-
-          {/* USER LINKS */}
-          <div className="border-t border-slate-200 pt-4 space-y-1 text-sm">
-            <NavLink
-              to="/cart"
-              onClick={() => setIsSidebarOpen(false)}
-              className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-700"
+          {/* Cart (user saja) */}
+          {!isAdmin && (
+            <button
+              type="button"
+              onClick={() => navigate("/cart")}
+              className="relative flex items-center gap-2 text-xs md:text-sm bg-slate-900 text-white px-3 py-1.5 rounded-full hover:bg-slate-800"
             >
+              <span role="img" aria-label="cart">
+                🛒
+              </span>
               <span>Cart</span>
               {cartCount > 0 && (
-                <span className="inline-flex items-center justify-center min-w-[20px] h-[20px] rounded-full bg-slate-900 text-white text-[11px]">
-                  {cartCount}
+                <span className="ml-1 min-w-[1.3rem] h-[1.3rem] rounded-full bg-white text-slate-900 text-[11px] flex items-center justify-center">
+                  {cartCount > 9 ? "9+" : cartCount}
                 </span>
               )}
-            </NavLink>
+            </button>
+          )}
 
-            {isLoggedIn && (
-              <>
-                <NavLink
-                  to="/transactions"
-                  onClick={() => setIsSidebarOpen(false)}
-                  className="block px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-700"
-                >
-                  My Transactions
-                </NavLink>
-                <NavLink
-                  to="/profile"
-                  onClick={() => setIsSidebarOpen(false)}
-                  className="block px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-700"
-                >
-                  Profile
-                </NavLink>
-                {userRole === "admin" && (
-                  <NavLink
-                    to="/admin"
-                    onClick={() => setIsSidebarOpen(false)}
-                    className="block px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-700"
-                  >
-                    Admin
-                  </NavLink>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* bottom area */}
-          <div className="mt-auto pt-4 border-t border-slate-200 space-y-2">
-            {isLoggedIn ? (
+          {/* User dropdown / Login button */}
+          {isLoggedIn ? (
+            <div className="relative">
               <button
                 type="button"
-                onClick={() => {
-                  setIsSidebarOpen(false);
-                  handleLogout();
-                }}
-                className="w-full bg-red-600 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-black"
+                onClick={() => setUserMenuOpen((v) => !v)}
+                className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 hover:bg-slate-50"
               >
-                Logout
+                <div className="w-7 h-7 rounded-full bg-slate-900 text-white text-xs flex items-center justify-center">
+                  {displayName.charAt(0).toUpperCase()}
+                </div>
+                <div className="hidden sm:flex flex-col items-start leading-tight">
+                  <span className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
+                    {isAdmin ? "Admin Panel" : "Traveler"}
+                  </span>
+                  <span className="text-xs font-medium text-slate-900 max-w-[7rem] truncate">
+                    {displayName}
+                  </span>
+                </div>
+                <span className="text-xs text-slate-400">▾</span>
               </button>
-            ) : (
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsSidebarOpen(false);
-                    navigate("/login");
-                  }}
-                  className="flex-1 border border-slate-300 text-slate-700 rounded-xl py-2 text-sm hover:bg-slate-100"
-                >
-                  Login
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsSidebarOpen(false);
-                    navigate("/register");
-                  }}
-                  className="flex-1 bg-slate-900 text-white rounded-xl py-2 text-sm font-medium hover:bg-black"
-                >
-                  Sign Up
-                </button>
-              </div>
-            )}
-          </div>
+
+              {userMenuOpen && (
+                <div className="absolute right-0 mt-2 w-52 rounded-2xl border border-slate-100 bg-white shadow-lg py-2 text-sm">
+                  {isAdmin ? (
+                    <>
+                      <p className="px-3 pb-2 text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                        Admin Panel
+                      </p>
+                      <NavLink
+                        to="/admin"
+                        className="block px-3 py-1.5 hover:bg-slate-50"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        Dashboard
+                      </NavLink>
+                      <NavLink
+                        to="/admin/activities"
+                        className="block px-3 py-1.5 hover:bg-slate-50"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        Activities
+                      </NavLink>
+                      <NavLink
+                        to="/admin/promos"
+                        className="block px-3 py-1.5 hover:bg-slate-50"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        Promos
+                      </NavLink>
+                      <NavLink
+                        to="/admin/transactions"
+                        className="block px-3 py-1.5 hover:bg-slate-50"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        Transactions
+                      </NavLink>
+                      <NavLink
+                        to="/admin/users"
+                        className="block px-3 py-1.5 hover:bg-slate-50"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        Users
+                      </NavLink>
+                    </>
+                  ) : (
+                    <>
+                      <p className="px-3 pb-2 text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                        Traveler
+                      </p>
+                      <NavLink
+                        to="/profile"
+                        className="block px-3 py-1.5 hover:bg-slate-50"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        Profile
+                      </NavLink>
+                      <NavLink
+                        to="/transactions"
+                        className="block px-3 py-1.5 hover:bg-slate-50"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        My Transactions
+                      </NavLink>
+                      <NavLink
+                        to="/wishlist"
+                        className="block px-3 py-1.5 hover:bg-slate-50"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        Wishlist
+                      </NavLink>
+                      <NavLink
+                        to="/help"
+                        className="block px-3 py-1.5 hover:bg-slate-50"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        Help Center
+                      </NavLink>
+                    </>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="w-full text-left px-3 py-1.5 text-red-500 hover:bg-red-50 text-sm mt-1 border-t border-slate-100"
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => navigate("/login")}
+              className="text-xs md:text-sm font-medium text-slate-900 border border-slate-200 rounded-full px-3 py-1.5 hover:bg-slate-50"
+            >
+              Login / Register
+            </button>
+          )}
         </div>
-      )}
-    </header>
+      </div>
+    </nav>
   );
 }

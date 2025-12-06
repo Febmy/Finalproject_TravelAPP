@@ -3,9 +3,15 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../../lib/api.js";
 import { formatCurrency } from "../../lib/format.js";
-// ===== HELPER GAMBAR AKTIVITAS =====
+import { getFriendlyErrorMessage } from "../../lib/errors.js";
+import ActivityCard from "../../components/activity/ActivityCard.jsx";
+
+// ===== HELPER GAMBAR =====
 const FALLBACK_ACTIVITY_IMAGE =
   "https://images.pexels.com/photos/1001965/pexels-photo-1001965.jpeg?auto=compress&cs=tinysrgb&w=1200";
+
+const FALLBACK_PROMO_IMAGE =
+  "https://images.pexels.com/photos/258154/pexels-photo-258154.jpeg?auto=compress&cs=tinysrgb&w=1200";
 
 function getActivityImage(act) {
   return (
@@ -22,49 +28,58 @@ export default function Home() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [popularCount, setPopularCount] = useState(6); // jumlah awal kartu popular
 
   const navigate = useNavigate();
 
+  const loadHomepage = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const [pRes, aRes, cRes] = await Promise.all([
+        api.get("/promos"),
+        api.get("/activities?limit=12"),
+        api.get("/categories"),
+      ]);
+
+      setPromos(pRes.data?.data || []);
+      setActivities(aRes.data?.data || []);
+      setCategories(cRes.data?.data || []);
+    } catch (err) {
+      console.error("Homepage error:", err.response?.data || err.message);
+      const msg = getFriendlyErrorMessage(err, "Gagal memuat data homepage.");
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        setError("");
-
-        const [pRes, aRes, cRes] = await Promise.all([
-          api.get("/promos"),
-          api.get("/activities?limit=8"),
-          api.get("/categories"),
-        ]);
-
-        setPromos(pRes.data?.data || []);
-        setActivities(aRes.data?.data || []);
-        setCategories(cRes.data?.data || []);
-      } catch (err) {
-        console.error("Homepage error:", err.response?.data || err.message);
-        setError("Gagal memuat data homepage.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    load();
+    loadHomepage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ===== DATA PROMO & HERO =====
+  // ===== DATA TURUNAN =====
   const heroPromo = promos[0] || null;
 
   const heroImage =
     heroPromo?.imageUrl ||
     (Array.isArray(heroPromo?.imageUrls) && heroPromo.imageUrls[0]) ||
-    "https://images.pexels.com/photos/258154/pexels-photo-258154.jpeg?auto=compress&cs=tinysrgb&w=1200";
+    FALLBACK_PROMO_IMAGE;
 
   const heroPromoCode = heroPromo?.promo_code;
   const heroMinPrice = heroPromo?.minimum_claim_price;
   const heroDiscount = heroPromo?.promo_discount_price;
 
-  const topActivities = activities.slice(0, 6);
+  const recommendedActivities = activities.slice(0, 4);
+  const maxPopular = Math.min(activities.length, 12);
+  const popularActivities = activities.slice(
+    0,
+    Math.min(popularCount, maxPopular || 0)
+  );
   const topCategories = categories.slice(0, 6);
+  const latestPromos = promos.slice(0, 3);
 
   // ===== STATE: LOADING & ERROR =====
   if (loading) {
@@ -86,8 +101,17 @@ export default function Home() {
   if (error) {
     return (
       <div className="min-h-screen bg-slate-50 overflow-x-hidden">
-        <div className="max-w-6xl mx-auto px-4 py-10">
-          <p className="text-sm text-red-600">{error}</p>
+        <div className="max-w-6xl mx-auto px-4 py-10 space-y-4">
+          <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-3">
+            <p className="text-xs md:text-sm text-red-700">{error}</p>
+          </div>
+          <button
+            type="button"
+            onClick={loadHomepage}
+            className="inline-flex px-4 py-2 rounded-full border border-slate-200 text-xs md:text-sm text-slate-700 hover:bg-slate-50"
+          >
+            Coba lagi
+          </button>
         </div>
       </div>
     );
@@ -97,7 +121,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-slate-50 overflow-x-hidden">
       <div className="max-w-6xl mx-auto px-4 py-10 space-y-16">
-        {/* ================= HERO (tanpa collage) ================= */}
+        {/* =============== HERO + PROMO =============== */}
         <section className="space-y-6">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white border border-slate-200 text-[11px] uppercase tracking-[0.18em] text-slate-500 shadow-sm">
             TravelApp
@@ -117,7 +141,6 @@ export default function Home() {
             </p>
           </div>
 
-          {/* ==== BANNER PROMO BESAR ==== */}
           {heroPromo ? (
             <div className="bg-white rounded-3xl shadow-lg shadow-slate-200/60 border border-slate-100 overflow-hidden">
               <div className="p-5 md:p-6 space-y-3">
@@ -181,7 +204,7 @@ export default function Home() {
                   loading="lazy"
                   onError={(e) => {
                     e.currentTarget.onerror = null;
-                    e.currentTarget.src = FALLBACK_ACTIVITY_IMAGE;
+                    e.currentTarget.src = FALLBACK_PROMO_IMAGE;
                   }}
                 />
               </div>
@@ -199,7 +222,70 @@ export default function Home() {
           )}
         </section>
 
-        {/* ================= BRANDS / REGION MARQUEE ================= */}
+        {/* =============== QUICK ACTIONS (ACTIVITY / CART / TRANSACTIONS / PROMOS) =============== */}
+        <section className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+          <Link
+            to="/activity"
+            className="group bg-white rounded-2xl border border-slate-200 p-3 md:p-4 shadow-sm hover:shadow-md transition flex flex-col justify-between"
+          >
+            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
+              Activities
+            </p>
+            <p className="mt-1 text-sm md:text-base font-semibold text-slate-900">
+              Cari aktivitas
+            </p>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Lihat semua aktivitas yang tersedia.
+            </p>
+          </Link>
+
+          <Link
+            to="/cart"
+            className="group bg-white rounded-2xl border border-slate-200 p-3 md:p-4 shadow-sm hover:shadow-md transition flex flex-col justify-between"
+          >
+            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
+              Cart
+            </p>
+            <p className="mt-1 text-sm md:text-base font-semibold text-slate-900">
+              Lanjutkan pesanan
+            </p>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Review keranjang dan lanjut ke pembayaran.
+            </p>
+          </Link>
+
+          <Link
+            to="/transactions"
+            className="group bg-white rounded-2xl border border-slate-200 p-3 md:p-4 shadow-sm hover:shadow-md transition flex flex-col justify-between"
+          >
+            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
+              Transactions
+            </p>
+            <p className="mt-1 text-sm md:text-base font-semibold text-slate-900">
+              Riwayat perjalanan
+            </p>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Cek status dan detail pembayaranmu.
+            </p>
+          </Link>
+
+          <Link
+            to="/promos"
+            className="group bg-white rounded-2xl border border-slate-200 p-3 md:p-4 shadow-sm hover:shadow-md transition flex flex-col justify-between"
+          >
+            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
+              Promos
+            </p>
+            <p className="mt-1 text-sm md:text-base font-semibold text-slate-900">
+              Lihat promo
+            </p>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Gunakan kode promo sebelum checkout.
+            </p>
+          </Link>
+        </section>
+
+        {/* =============== MARQUEE =============== */}
         <section className="border-y bg-white" aria-label="Brands">
           <div className="overflow-hidden">
             <div className="flex gap-12 py-6 whitespace-nowrap brands-marquee">
@@ -241,7 +327,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ================= WHY CHOOSE US ================= */}
+        {/* =============== WHY CHOOSE US =============== */}
         <section id="features" className="space-y-8">
           <div className="text-center space-y-3">
             <h2 className="text-2xl md:text-3xl font-bold text-slate-900">
@@ -287,7 +373,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ================= CATEGORIES ================= */}
+        {/* =============== CATEGORIES =============== */}
         <section id="categories" className="space-y-5">
           <div className="flex items-center justify-between">
             <div>
@@ -344,7 +430,31 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ================= POPULAR DESTINATIONS ================= */}
+        {/* =============== REKOMENDASI UNTUKMU =============== */}
+        {recommendedActivities.length > 0 && (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg md:text-xl font-semibold text-slate-900">
+                Rekomendasi untukmu
+              </h2>
+              <button
+                type="button"
+                onClick={() => navigate("/activity")}
+                className="text-[11px] md:text-xs text-slate-500 hover:text-slate-700"
+              >
+                Lihat semua aktivitas →
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-4">
+              {recommendedActivities.map((act) => (
+                <ActivityCard key={act.id} activity={act} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* =============== POPULAR DESTINATIONS (+ / -) =============== */}
         <section id="popular" className="space-y-5">
           <div className="flex items-center justify-between">
             <div>
@@ -356,22 +466,42 @@ export default function Home() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <button className="w-7 h-7 rounded-full border border-slate-200 text-slate-500 text-xs">
+              <button
+                type="button"
+                onClick={() => setPopularCount((prev) => Math.max(3, prev - 3))}
+                disabled={popularActivities.length <= 3}
+                className={`w-7 h-7 rounded-full border text-xs ${
+                  popularActivities.length <= 3
+                    ? "border-slate-200 text-slate-300 cursor-not-allowed"
+                    : "border-slate-200 text-slate-500 hover:bg-slate-100"
+                }`}
+              >
                 -
               </button>
-              <button className="w-7 h-7 rounded-full bg-sky-600 text-white text-xs">
+              <button
+                type="button"
+                onClick={() =>
+                  setPopularCount((prev) => Math.min(maxPopular, prev + 3))
+                }
+                disabled={popularActivities.length >= maxPopular}
+                className={`w-7 h-7 rounded-full text-xs ${
+                  popularActivities.length >= maxPopular
+                    ? "bg-sky-200 text-white cursor-not-allowed"
+                    : "bg-sky-600 text-white hover:bg-sky-700"
+                }`}
+              >
                 +
               </button>
             </div>
           </div>
 
-          {topActivities.length === 0 ? (
+          {popularActivities.length === 0 ? (
             <p className="text-sm text-slate-500">
               Belum ada aktivitas yang tersedia.
             </p>
           ) : (
             <div className="grid gap-4 md:grid-cols-3">
-              {topActivities.map((act) => (
+              {popularActivities.map((act) => (
                 <div
                   key={act.id}
                   className="bg-white rounded-3xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition flex flex-col overflow-hidden"
@@ -416,7 +546,78 @@ export default function Home() {
           )}
         </section>
 
-        {/* ================= FEATURE BLOCKS ================= */}
+        {/* =============== PROMO TERBARU =============== */}
+        {latestPromos.length > 0 && (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg md:text-xl font-semibold text-slate-900">
+                Promo terbaru
+              </h2>
+              <Link
+                to="/promos"
+                className="text-[11px] md:text-xs text-slate-500 hover:text-slate-700"
+              >
+                Lihat semua promo →
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {latestPromos.map((promo) => {
+                const img =
+                  promo.imageUrl ||
+                  (Array.isArray(promo.imageUrls) && promo.imageUrls[0]) ||
+                  FALLBACK_PROMO_IMAGE;
+
+                return (
+                  <article
+                    key={promo.id}
+                    className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm flex flex-col"
+                  >
+                    <div className="h-32 bg-slate-100 overflow-hidden">
+                      <img
+                        src={img}
+                        alt={promo.title || "Promo"}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = FALLBACK_PROMO_IMAGE;
+                        }}
+                      />
+                    </div>
+                    <div className="p-3 flex-1 flex flex-col gap-1">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                        Promo
+                      </p>
+                      <h3 className="text-sm font-semibold text-slate-900 line-clamp-2">
+                        {promo.title || "Travel promo"}
+                      </h3>
+                      {promo.description && (
+                        <p className="text-[11px] text-slate-500 line-clamp-2">
+                          {promo.description}
+                        </p>
+                      )}
+                      <div className="mt-2 flex flex-wrap gap-1 text-[11px]">
+                        {promo.promo_code && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-900 text-white">
+                            {promo.promo_code}
+                          </span>
+                        )}
+                        {promo.promo_discount_price && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+                            Diskon {formatCurrency(promo.promo_discount_price)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* =============== FEATURE BLOCKS (BOOK CAR / BOOK HOTEL) =============== */}
         <section className="grid gap-6 md:grid-cols-2">
           <div className="bg-white rounded-3xl border border-slate-200 p-5 md:p-6 shadow-sm flex flex-col gap-3">
             <h3 className="text-sm font-semibold text-slate-900">Book Car</h3>
@@ -449,7 +650,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ================= CLIENT REVIEW ================= */}
+        {/* =============== CLIENT REVIEW =============== */}
         <section
           id="review"
           className="grid gap-6 md:grid-cols-[1.1fr,1.2fr] items-center"

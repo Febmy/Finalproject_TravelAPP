@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import api from "../../lib/api";
 import AdminLayout from "../../components/layout/AdminLayout.jsx";
 import { formatCurrency, formatDateTime } from "../../lib/format.js";
+import { useToast } from "../../context/ToastContext.jsx";
+import { getFriendlyErrorMessage } from "../../lib/errors.js";
 
 // helper ambil total dari berbagai kemungkinan field
 function getTotal(tx) {
@@ -21,6 +23,7 @@ export default function AdminTransactions() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [updatingId, setUpdatingId] = useState(null);
+  const { showToast } = useToast();
 
   // pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -31,6 +34,7 @@ export default function AdminTransactions() {
     const load = async () => {
       try {
         setLoading(true);
+        setError("");
         const res = await api.get("/all-transactions");
         setTransactions(res.data.data || []);
       } catch (err) {
@@ -38,17 +42,24 @@ export default function AdminTransactions() {
           "Admin transactions error:",
           err.response?.data || err.message
         );
-        setError("Gagal memuat semua transaksi.");
+        const msg = getFriendlyErrorMessage(
+          err,
+          "Gagal memuat semua transaksi."
+        );
+        setError(msg);
+        showToast({ type: "error", message: msg });
       } finally {
         setLoading(false);
       }
     };
     load();
-  }, []);
+  }, [showToast]);
 
+  // kalau filter atau jumlah data berubah, balik ke page 1
   useEffect(() => {
     setCurrentPage(1);
   }, [statusFilter, transactions.length]);
+
   // sort by tanggal terbaru (createdAt / updatedAt / transactionDate)
   const sorted = [...transactions].sort((a, b) => {
     const dateA = new Date(
@@ -103,7 +114,11 @@ export default function AdminTransactions() {
         "update-transaction-status error:",
         err.response?.data || err.message
       );
-      alert("Gagal update status transaksi.");
+      const msg = getFriendlyErrorMessage(
+        err,
+        "Gagal mengupdate status transaksi."
+      );
+      showToast({ type: "error", message: msg });
     } finally {
       setUpdatingId(null);
     }
@@ -147,8 +162,15 @@ export default function AdminTransactions() {
       </div>
 
       {/* ERROR / LOADING */}
-      {loading && <p className="text-sm text-slate-500">Memuat transaksi...</p>}
-      {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
+      {loading && !error && (
+        <p className="text-sm text-slate-500 mb-2">Memuat transaksi...</p>
+      )}
+
+      {error && (
+        <div className="mb-3 rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-xs md:text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       {/* TABEL */}
       {!loading && !error && (
@@ -170,7 +192,6 @@ export default function AdminTransactions() {
                 const pm = tx.paymentMethod || tx.payment_method || null;
                 const total = getTotal(tx);
                 const statusLower = (tx.status || "").toLowerCase();
-
                 const isPending = statusLower === "pending";
 
                 return (
@@ -270,6 +291,8 @@ export default function AdminTransactions() {
               )}
             </tbody>
           </table>
+
+          {/* PAGINATION */}
           {filtered.length > PAGE_SIZE && (
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mt-4 text-xs md:text-sm">
               <p className="text-slate-500">

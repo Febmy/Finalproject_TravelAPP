@@ -1,459 +1,372 @@
 // src/pages/user/Checkout.jsx
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import api from "../../lib/api.js";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import api from "../../lib/api";
 import { useToast } from "../../context/ToastContext.jsx";
+import Spinner from "../../components/ui/Spinner.jsx";
+import CheckoutStepper from "../../components/ui/CheckoutStepper.jsx";
 import { formatCurrency } from "../../lib/format.js";
 
+// =====================
+// LocalStorage helpers
+// =====================
+const TX_TOTALS_STORAGE_KEY = "travelapp_transaction_totals";
+
+function loadTransactionTotals() {
+  try {
+    const raw = localStorage.getItem(TX_TOTALS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") return parsed;
+    return {};
+  } catch {
+    return {};
+  }
+}
+
+function saveTransactionTotals(map) {
+  try {
+    localStorage.setItem(TX_TOTALS_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
+// Promo kode hard-coded sesuai brief
+const PROMO_CODES = {
+  AKHIRTAHUN25: 150_000,
+};
 
 export default function Checkout() {
-  const [paymentMethods, setPaymentMethods] = useState([]);
-  const [selectedMethod, setSelectedMethod] = useState(null);
-
-  const [cartIds, setCartIds] = useState([]);
-  const [cartItems, setCartItems] = useState([]);
-
-  const [form, setForm] = useState({
-    fullName: "",
-    email: "",
-    phone: "",
-    note: "",
-  });
-
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-
-  // PROMO STATE
-  const [promoCodeInput, setPromoCodeInput] = useState("");
-  const [appliedPromo, setAppliedPromo] = useState(null);
-  const [discountAmount, setDiscountAmount] = useState(0);
-  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
-
   const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
 
+  const selectedCartIds = location.state?.selectedCartIds || [];
+
+  const [loading, setLoading] = useState(false);
+  const [carts, setCarts] = useState([]);
+  const [paymentMethods, setPaymentMethods] = useState([]);
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState(null);
+
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const [promoCodeInput, setPromoCodeInput] = useState("");
+  const [appliedPromoCode, setAppliedPromoCode] = useState(null);
+
+  // -------------------------
+  // Load carts & payment methods
+  // -------------------------
   useEffect(() => {
-    const load = async () => {
+    async function fetchData() {
       try {
         setLoading(true);
 
-        // ambil payment methods
-        const pmRes = await api.get("/payment-methods");
-        setPaymentMethods(pmRes.data.data || []);
+        const [cartRes, pmRes] = await Promise.all([
+          api.get("/carts"),
+          api.get("/payment-methods"),
+        ]);
 
-        // ambil cart untuk dapatkan cartIds + detail buat subtotal
-        const cartRes = await api.get("/carts");
-        const carts = cartRes.data.data || [];
+        const allCarts = cartRes.data?.data || [];
+        const filtered =
+          selectedCartIds.length > 0
+            ? allCarts.filter((c) => selectedCartIds.includes(c.id))
+            : allCarts;
 
-        setCartIds(carts.map((c) => c.id));
-        setCartItems(carts);
-
-        if (carts.length === 0) {
-          const msg = "Keranjang kosong. Tambahkan aktivitas dulu.";
-          setError(msg);
-          showToast({
-            type: "error",
-            message: msg,
-          });
-        }
+        setCarts(filtered);
+        setPaymentMethods(pmRes.data?.data || []);
       } catch (err) {
-        console.error(
-          "Checkout init error:",
-          err.response?.data || err.message
-        );
-        const msg = "Gagal memuat data checkout.";
-        setError(msg);
+        console.error("Error load checkout data:", err.response?.data || err);
         showToast({
           type: "error",
-          message: msg,
+          message: "Gagal memuat data checkout.",
         });
       } finally {
         setLoading(false);
       }
-    };
+    }
 
-    load();
-  }, [showToast]);
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-  };
+  // -------------------------
+  // Hitung subtotal, diskon, total
+  // -------------------------
+  const { subtotal, discount, totalToPay } = useMemo(() => {
+    const sub = carts.reduce((sum, cart) => {
+      const price = cart.activity?.price || 0;
+      return sum + price * (cart.quantity || 1);
+    }, 0);
 
-  // Hitung subtotal dari isi cart
-  const subtotal = cartItems.reduce((sum, item) => {
-    const price =
-      item.totalPrice ??
-      item.total_price ??
-      item.price ??
-      item.activity?.price ??
-      0;
-    const qty = item.quantity ?? 1;
-    return sum + price * qty;
-  }, 0);
+    const disc = appliedPromoCode ? PROMO_CODES[appliedPromoCode] || 0 : 0;
 
-  const grandTotal = Math.max(subtotal - discountAmount, 0);
+    const total = Math.max(sub - disc, 0);
 
-  const isFormValid =
-    form.fullName.trim() &&
-    form.email.trim() &&
-    form.phone.trim() &&
-    selectedMethod &&
-    cartIds.length > 0;
+    return { subtotal: sub, discount: disc, totalToPay: total };
+  }, [carts, appliedPromoCode]);
 
-  // Terapkan kode promo: cek ke /promos, validasi min transaksi, lalu hitung diskon
-  const handleApplyPromo = async () => {
-    const raw = promoCodeInput.trim();
-    if (!raw) {
+  // -------------------------
+  // Promo handler
+  // -------------------------
+  function handleApplyPromo() {
+    const code = promoCodeInput.trim().toUpperCase();
+    if (!code) return;
+
+    if (!PROMO_CODES[code]) {
       showToast({
         type: "error",
-        message: "Masukkan kode promo terlebih dahulu.",
+        message: "Kode promo tidak valid.",
       });
       return;
     }
 
-    const codeToFind = raw.toUpperCase();
+    setAppliedPromoCode(code);
+    showToast({
+      type: "success",
+      message: `Kode promo ${code} berhasil digunakan.`,
+    });
+  }
 
-    try {
-      setIsApplyingPromo(true);
-
-      const res = await api.get("/promos");
-      const promos = res.data?.data || [];
-
-      const match = promos.find((p) => {
-        const c = (p.promoCode || p.promo_code || "").toUpperCase();
-        return c === codeToFind;
-      });
-
-      if (!match) {
-        setAppliedPromo(null);
-        setDiscountAmount(0);
-        showToast({
-          type: "error",
-          message: "Kode promo tidak ditemukan.",
-        });
-        return;
-      }
-
-      const minPrice =
-        match.minimumClaimPrice ?? match.minimum_claim_price ?? 0;
-      const discount =
-        match.promoDiscountPrice ?? match.promo_discount_price ?? 0;
-
-      if (subtotal < minPrice) {
-        setAppliedPromo(null);
-        setDiscountAmount(0);
-        showToast({
-          type: "error",
-          message: `Minimal transaksi untuk promo ini adalah ${formatCurrency(
-            minPrice
-          )}.`,
-        });
-        return;
-      }
-
-      setAppliedPromo(match);
-      setDiscountAmount(Math.min(discount, subtotal));
-
-      showToast({
-        type: "success",
-        message: `Promo ${codeToFind} berhasil diterapkan.`,
-      });
-    } catch (err) {
-      console.error("Apply promo error:", err.response?.data || err.message);
+  // -------------------------
+  // Confirm checkout
+  // -------------------------
+  async function handleConfirmCheckout() {
+    if (loading) return;
+    if (carts.length === 0) {
       showToast({
         type: "error",
-        message: "Gagal menerapkan promo. Coba beberapa saat lagi.",
+        message: "Keranjang masih kosong.",
       });
-    } finally {
-      setIsApplyingPromo(false);
+      return;
     }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-
-    if (!isFormValid) {
-      const msg =
-        "Lengkapi form, pilih metode pembayaran & pastikan keranjang terisi.";
-      setError(msg);
-      showToast({ type: "error", message: msg });
+    if (!selectedPaymentMethodId) {
+      showToast({
+        type: "error",
+        message: "Pilih metode pembayaran terlebih dahulu.",
+      });
       return;
     }
 
     try {
-      setSubmitting(true);
+      setLoading(true);
 
-      // payload tetap sama agar tidak mengganggu API backend
-      await api.post("/create-transaction", {
-        cartIds,
-        paymentMethodId: selectedMethod,
-        // Kalau nanti API sudah support promo, bisa dipertimbangkan tambah:
-        // promoCode: appliedPromo ? (appliedPromo.promoCode || appliedPromo.promo_code) : undefined,
-      });
+      const payload = {
+        cartIds:
+          selectedCartIds.length > 0 ? selectedCartIds : carts.map((c) => c.id),
+        paymentMethodId: selectedPaymentMethodId,
+        promoCode: appliedPromoCode ?? null,
+        notes,
+      };
+
+      const res = await api.post("/create-transaction", payload);
+      const newTx = res.data?.data;
+
+      // Simpan total yang BENAR (totalToPay) ke localStorage
+      if (newTx?.id) {
+        const totalsMap = loadTransactionTotals();
+        totalsMap[newTx.id] = totalToPay;
+        saveTransactionTotals(totalsMap);
+      }
 
       showToast({
         type: "success",
-        message: "Checkout berhasil! Transaksi sudah dibuat.",
+        message: "Transaksi berhasil dibuat.",
       });
 
-      navigate("/transactions");
+      // PENTING: pastikan path ini sama dengan route di App.jsx
+      // kalau route-mu adalah "/transactions", ganti di sini.
+      navigate("/my-transactions");
     } catch (err) {
-      console.error("Checkout error:", err.response?.data || err.message);
-      const msg = "Checkout gagal, coba lagi.";
-      setError(msg);
-      showToast({ type: "error", message: msg });
+      console.error("Error create transaction:", err.response?.data || err);
+      showToast({
+        type: "error",
+        message:
+          err.response?.data?.errors ||
+          err.response?.data?.message ||
+          "Gagal membuat transaksi.",
+      });
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
-  };
+  }
 
-  if (loading) {
+  // -------------------------
+  // UI
+  // -------------------------
+  if (loading && carts.length === 0) {
     return (
-      <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
-        <div className="flex gap-2">
-          <div className="h-2 w-10 rounded-full bg-slate-200 animate-pulse" />
-          <div className="h-2 w-10 rounded-full bg-slate-200 animate-pulse" />
-          <div className="h-2 w-10 rounded-full bg-slate-200 animate-pulse" />
-        </div>
-        <div className="grid md:grid-cols-2 gap-6 mt-4">
-          <div className="h-64 bg-slate-200 rounded-3xl animate-pulse" />
-          <div className="h-64 bg-slate-200 rounded-3xl animate-pulse" />
-        </div>
+      <div className="flex justify-center py-16">
+        <Spinner />
       </div>
     );
   }
 
-  return (
-    <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
-      {/* tab bar kecil */}
-      <div className="flex gap-2">
-        <div className="h-2 w-10 rounded-full bg-slate-300" />
-        <div className="h-2 w-10 rounded-full bg-slate-300" />
-        <div className="h-2 w-10 rounded-full bg-slate-300" />
-      </div>
-
-      {error && (
-        <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-2 text-xs text-red-700">
-          {error}
+  if (carts.length === 0) {
+    return (
+      <section className="space-y-4">
+        <CheckoutStepper activeStep={2} />
+        <div className="bg-white rounded-3xl border border-slate-200 p-6 text-center">
+          <p className="text-sm text-slate-500">
+            Keranjangmu kosong. Silakan pilih aktivitas terlebih dahulu.
+          </p>
         </div>
-      )}
+      </section>
+    );
+  }
 
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* FORM DATA USER */}
-        <form
-          onSubmit={handleSubmit}
-          className="bg-white rounded-3xl border border-slate-200 p-6 space-y-4 shadow-sm"
-        >
-          <h2 className="font-semibold mb-2 text-slate-900">Form</h2>
-          <p className="text-xs text-slate-500 mb-2">
-            Pastikan data kamu sudah benar sebelum melakukan pembayaran.
+  return (
+    <section className="space-y-6">
+      <CheckoutStepper activeStep={2} />
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr),minmax(0,1.3fr)]">
+        {/* FORM */}
+        <div className="bg-white rounded-3xl border border-slate-200 p-6 space-y-4">
+          <h1 className="text-lg font-semibold">Form</h1>
+          <p className="text-xs text-slate-500">
+            Pastikan data kamu sudah benar sebelum melanjutkan pembayaran.
           </p>
 
-          <div className="space-y-3">
+          <div className="space-y-3 mt-2">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-700">
-                Nama Lengkap
-              </label>
+              <label className="text-xs text-slate-500">Nama Lengkap</label>
               <input
                 type="text"
-                name="fullName"
-                value={form.fullName}
-                onChange={handleChange}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm
-                           focus:outline-none focus:ring-2 focus:ring-slate-400"
-                placeholder="Nama lengkap sesuai identitas"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Nama kamu"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-700">
-                Email
-              </label>
+              <label className="text-xs text-slate-500">Email</label>
               <input
                 type="email"
-                name="email"
-                value={form.email}
-                onChange={handleChange}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm
-                           focus:outline-none focus:ring-2 focus:ring-slate-400"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 placeholder="email@example.com"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-700">
-                Nomor Telepon
-              </label>
+              <label className="text-xs text-slate-500">Nomor Telepon</label>
               <input
                 type="tel"
-                name="phone"
-                value={form.phone}
-                onChange={handleChange}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm
-                           focus:outline-none focus:ring-2 focus:ring-slate-400"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
                 placeholder="08xxxxxxxxxx"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-700">
+              <label className="text-xs text-slate-500">
                 Catatan (opsional)
               </label>
               <textarea
-                name="note"
-                value={form.note}
-                onChange={handleChange}
-                rows={3}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm
-                           focus:outline-none focus:ring-2 focus:ring-slate-400 resize-none"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm min-h-[72px] focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
                 placeholder="Catatan tambahan untuk perjalananmu..."
               />
             </div>
           </div>
+        </div>
 
-          <button
-            type="submit"
-            disabled={!isFormValid || submitting}
-            className={`mt-4 w-full rounded-xl py-2 text-sm font-medium 
-              ${
-                !isFormValid || submitting
-                  ? "bg-slate-300 text-slate-500 cursor-not-allowed"
-                  : "bg-black text-white hover:bg-slate-900"
-              } transition`}
-          >
-            {submitting ? "Processing..." : "Confirm Checkout"}
-          </button>
-        </form>
+        {/* RINGKASAN & PEMBAYARAN */}
+        <aside className="bg-white rounded-3xl border border-slate-200 p-6 space-y-4">
+          <h2 className="text-lg font-semibold">Ringkasan & Pembayaran</h2>
 
-        {/* RINGKASAN + PAYMENT METHOD */}
-        <section className="bg-slate-100 rounded-3xl p-6 space-y-4">
-          <h2 className="font-semibold mb-2 text-slate-900">
-            Ringkasan & Pembayaran
-          </h2>
-          <p className="text-xs text-slate-500 mb-2">
-            Cek kembali total belanja dan pilih metode pembayaran yang kamu
-            inginkan.
-          </p>
-
-          {/* Ringkasan pembayaran */}
-          <div className="space-y-1 text-xs md:text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-slate-600">Subtotal</span>
+          <div className="border border-slate-100 rounded-2xl p-4 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Subtotal</span>
               <span className="font-medium">{formatCurrency(subtotal)}</span>
             </div>
-
-            <div className="flex items-center justify-between">
-              <span className="text-slate-600">Diskon promo</span>
-              <span className="font-medium text-emerald-700">
-                {discountAmount > 0
-                  ? `- ${formatCurrency(discountAmount)}`
-                  : "-"}
+            <div className="flex justify-between">
+              <span className="text-slate-500">Diskon promo</span>
+              <span className="font-medium text-emerald-600">
+                {discount > 0 ? `- ${formatCurrency(discount)}` : "-"}
               </span>
             </div>
-
-            <div className="border-t border-slate-300 mt-2 pt-2 flex items-center justify-between">
-              <span className="font-semibold text-slate-900">Total bayar</span>
-              <span className="font-semibold text-slate-900">
-                {formatCurrency(grandTotal)}
+            <div className="flex justify-between pt-2 border-t border-dashed border-slate-200 mt-1">
+              <span className="font-semibold">Total bayar</span>
+              <span className="font-semibold">
+                {formatCurrency(totalToPay)}
               </span>
             </div>
           </div>
 
-          {/* Input Kode Promo */}
-          <div className="space-y-2 pt-2 border-t border-slate-300">
-            <label className="block text-[11px] font-medium text-slate-700">
-              Kode Promo
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={promoCodeInput}
-                onChange={(e) =>
-                  setPromoCodeInput(e.target.value.toUpperCase())
-                }
-                placeholder="Masukkan kode promo"
-                className="flex-1 rounded-full border border-slate-300 px-3 py-2 text-xs md:text-sm focus:outline-none focus:ring-1 focus:ring-slate-400"
-              />
-              <button
-                type="button"
-                onClick={handleApplyPromo}
-                disabled={isApplyingPromo || subtotal <= 0}
-                className="px-3 md:px-4 py-2 rounded-full bg-slate-900 text-white text-xs md:text-sm disabled:bg-slate-400"
-              >
-                {isApplyingPromo ? "Menerapkan..." : "Gunakan"}
-              </button>
-            </div>
-
-            {appliedPromo && (
-              <p className="text-[11px] text-slate-600">
-                Promo{" "}
-                <span className="font-mono bg-slate-200 px-1 rounded">
-                  {(
-                    appliedPromo.promoCode ||
-                    appliedPromo.promo_code ||
-                    ""
-                  ).toUpperCase()}
-                </span>{" "}
-                aktif. Min. transaksi{" "}
-                {formatCurrency(
-                  appliedPromo.minimumClaimPrice ??
-                    appliedPromo.minimum_claim_price ??
-                    0
-                )}{" "}
-                • Potongan{" "}
-                {formatCurrency(
-                  appliedPromo.promoDiscountPrice ??
-                    appliedPromo.promo_discount_price ??
-                    0
-                )}
-                .
-              </p>
-            )}
+          {/* Input kode promo */}
+          <div className="flex gap-2 items-center">
+            <input
+              type="text"
+              placeholder="Kode Promo"
+              className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10 uppercase"
+              value={promoCodeInput}
+              onChange={(e) => setPromoCodeInput(e.target.value)}
+            />
+            <button
+              type="button"
+              onClick={handleApplyPromo}
+              className="px-4 py-2 rounded-xl text-xs font-medium bg-slate-900 text-white hover:bg-slate-800"
+            >
+              Gunakan
+            </button>
           </div>
 
-          {/* Payment methods */}
-          <div className="space-y-2 pt-2 border-t border-slate-300">
-            <h3 className="text-xs font-medium text-slate-700">
-              Metode Pembayaran
-            </h3>
+          {appliedPromoCode && (
+            <p className="text-xs text-emerald-600">
+              Promo <span className="font-semibold">{appliedPromoCode}</span>{" "}
+              aktif. Potongan {formatCurrency(PROMO_CODES[appliedPromoCode])}.
+            </p>
+          )}
+
+          {/* Pilih metode pembayaran */}
+          <div className="space-y-2 pt-2">
+            <p className="text-xs text-slate-500">Metode Pembayaran</p>
+
             <div className="space-y-2">
               {paymentMethods.map((pm) => (
                 <label
                   key={pm.id}
-                  className="flex items-center gap-2 text-sm cursor-pointer"
+                  className={`flex items-center justify-between rounded-xl border px-3 py-2 cursor-pointer text-sm transition 
+                    ${
+                      selectedPaymentMethodId === pm.id
+                        ? "border-slate-900 bg-slate-900/5"
+                        : "border-slate-200 hover:bg-slate-50"
+                    }`}
                 >
-                  <input
-                    type="radio"
-                    name="payment"
-                    value={pm.id}
-                    checked={selectedMethod === pm.id}
-                    onChange={() => setSelectedMethod(pm.id)}
-                    className="accent-slate-900"
-                  />
-                  {pm.imageUrl ? (
-                    <img
-                      src={pm.imageUrl}
-                      alt={pm.name}
-                      className="h-6 object-contain"
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      className="accent-slate-900"
+                      checked={selectedPaymentMethodId === pm.id}
+                      onChange={() => setSelectedPaymentMethodId(pm.id)}
                     />
-                  ) : (
-                    <span className="text-xs text-slate-700">{pm.name}</span>
-                  )}
+                    <span>{pm.name}</span>
+                  </div>
                 </label>
               ))}
-
-              {paymentMethods.length === 0 && (
-                <p className="text-xs text-slate-500">
-                  Tidak ada metode pembayaran yang tersedia.
-                </p>
-              )}
             </div>
           </div>
-        </section>
+
+          {/* Tombol konfirmasi */}
+          <button
+            type="button"
+            onClick={handleConfirmCheckout}
+            disabled={loading}
+            className="w-full mt-2 rounded-xl bg-slate-900 text-white text-sm font-medium py-2.5 disabled:opacity-70 disabled:cursor-not-allowed hover:bg-slate-800"
+          >
+            {loading ? "Memproses..." : "Confirm Checkout"}
+          </button>
+        </aside>
       </div>
-    </div>
+    </section>
   );
 }

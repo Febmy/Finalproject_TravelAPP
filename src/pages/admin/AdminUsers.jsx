@@ -4,6 +4,7 @@ import api from "../../lib/api.js";
 import AdminLayout from "../../components/layout/AdminLayout.jsx";
 import { useToast } from "../../context/ToastContext.jsx";
 import { formatDateTime } from "../../lib/format.js";
+import { getFriendlyErrorMessage } from "../../lib/errors.js";
 
 const PAGE_SIZE = 8;
 
@@ -29,7 +30,8 @@ export default function AdminUsers() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [searchTerm, setSearchTerm] = useState(""); // 🔎 NEW
+  const [searchTerm, setSearchTerm] = useState(""); // 🔎 search
+
   // GET semua user
   const loadUsers = async () => {
     try {
@@ -40,14 +42,14 @@ export default function AdminUsers() {
       const data = res.data?.data || [];
 
       const normalized = Array.isArray(data) ? data : [];
-      // 🔽 sort dari user terbaru
+      // sort dari user terbaru
       normalized.sort((a, b) => getUserTime(b) - getUserTime(a));
 
       setUsers(normalized);
       setCurrentPage(1); // setiap reload balik ke page 1
     } catch (err) {
       console.error("Admin users error:", err.response?.data || err.message);
-      const msg = "Gagal memuat daftar user.";
+      const msg = getFriendlyErrorMessage(err, "Gagal memuat daftar user.");
       setError(msg);
       showToast({ type: "error", message: msg });
     } finally {
@@ -86,20 +88,25 @@ export default function AdminUsers() {
       });
     } catch (err) {
       console.error("Update role error:", err.response?.data || err.message);
+      const msg = getFriendlyErrorMessage(
+        err,
+        "Gagal mengubah role user. Coba lagi."
+      );
       showToast({
         type: "error",
-        message: "Gagal mengubah role. Coba lagi.",
+        message: msg,
       });
     } finally {
       setSavingId(null);
     }
   };
+
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
     setCurrentPage(1); // tiap ganti search balik ke page 1
   };
 
-  // ===== SORTING + PAGINATION (di frontend) =====
+  // ===== SORTING + FILTER + PAGINATION =====
   const q = searchTerm.trim().toLowerCase();
 
   // filter berdasarkan nama / email
@@ -126,16 +133,15 @@ export default function AdminUsers() {
 
   return (
     <AdminLayout title="User Management">
-      {/* Container tengah, lebar dibatasi */}
       <div className="max-w-4xl mx-auto w-full">
         {/* STATE: loading */}
         {loading && !error && (
-          <p className="text-sm text-slate-500">Memuat daftar user.</p>
+          <p className="text-sm text-slate-500 mb-2">Memuat daftar user...</p>
         )}
 
         {/* STATE: error */}
         {error && (
-          <div className="mb-3 rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+          <div className="mb-3 rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-xs md:text-sm text-red-700">
             {error}
           </div>
         )}
@@ -143,6 +149,7 @@ export default function AdminUsers() {
         {/* STATE: sukses */}
         {!loading && !error && (
           <div className="space-y-3">
+            {/* Search + info jumlah */}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-1">
               <input
                 type="text"
@@ -170,6 +177,7 @@ export default function AdminUsers() {
                 </p>
               )}
             </div>
+
             {/* Summary kecil */}
             {totalUsers > 0 && (
               <div className="flex items-center justify-between text-[11px] text-slate-500">

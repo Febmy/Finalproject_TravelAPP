@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import api from "../../lib/api.js";
 import ActivityCard from "../../components/activity/ActivityCard.jsx";
 import { formatCurrency } from "../../lib/format.js";
+import { getFriendlyErrorMessage } from "../../lib/errors.js";
 
 export default function ActivityList() {
   const [activities, setActivities] = useState([]);
@@ -28,7 +29,11 @@ export default function ActivityList() {
         setPromos(promoRes.data?.data || []);
       } catch (err) {
         console.error("Activities error:", err.response?.data || err.message);
-        setError("Gagal memuat daftar aktivitas.");
+        const msg = getFriendlyErrorMessage(
+          err,
+          "Gagal memuat daftar aktivitas dan promo."
+        );
+        setError(msg);
       } finally {
         setLoading(false);
       }
@@ -57,6 +62,33 @@ export default function ActivityList() {
     return matchesSearch && matchesFilter;
   });
 
+  if (error) {
+    return (
+      <section className="space-y-4">
+        <header className="space-y-1">
+          <h1 className="text-xl md:text-2xl font-semibold text-slate-900">
+            All Activities
+          </h1>
+          <p className="text-sm text-slate-600">
+            Terjadi kesalahan saat memuat daftar aktivitas.
+          </p>
+        </header>
+
+        <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2">
+          <p className="text-xs md:text-sm text-red-700">{error}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="inline-flex px-4 py-2 rounded-full border border-slate-200 text-xs md:text-sm text-slate-700 hover:bg-slate-50"
+        >
+          Coba lagi
+        </button>
+      </section>
+    );
+  }
+  
   // === LOADING ===
   if (loading) {
     return (
